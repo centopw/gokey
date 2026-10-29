@@ -1,11 +1,15 @@
-# openkey-rs
+# GoKey
 
-Rust port of [OpenKey](https://github.com/tuyenvm/OpenKey) — an open-source
-Vietnamese input method currently shipped as two separate native apps
-(Objective-C/AppKit on macOS, Win32 on Windows), with no working Linux build.
+**GoKey** (Vietnamese: "Gõ Key") is a Rust rewrite of
+[OpenKey](https://github.com/tuyenvm/OpenKey) — an open-source Vietnamese input
+method currently shipped as two separate native apps (Objective-C/AppKit on
+macOS, Win32 on Windows), with no working Linux build.
 
-Working name only. The public name is undecided until the upstream author is
-consulted (DL-010).
+GPL-3.0. OpenKey and its author Mai Vu Tuyen are credited in `NOTICE.md`; the
+product name is ours only in the sense that we do not use theirs (DL-010).
+
+Maintained by `@centopw`. The project is planned, routed and verified by a
+Waker program manager; every published artifact carries `centopw` (DL-020).
 
 **Status: M0 — bootstrap.** No typing logic is implemented yet. This repository
 holds the plan, role roster, workflow, parity contracts and a compiling crate
@@ -17,14 +21,17 @@ skeleton.
 | --- | --- | --- |
 | 1.0 | macOS only: full typing parity, menu bar, settings, signed and notarised dmg | Next |
 | Post-1.0 | Windows, then Linux, on the same unchanged core | Planned |
-| Later | AI assist: inline completion / ghost text, next-word prediction, rewrite design | Seams only in 1.0 |
+| Later | AI assist: inline correction of the word at the caret (Tab accept / Esc dismiss), ghost completion, next-word prediction | Seams only in 1.0 |
 
 Cross-platform readiness is a hard constraint even though 1.0 ships on macOS:
 the engine stays OS-free, every adapter crate keeps compiling, and CI builds all
 three targets. AI features are post-1.0, but the extension seams (context
-provider, caret geometry, suggestion channel, accept/reject) ship inert in 1.0
-so the engine is never retrofitted. See DL-003, DL-014, DL-015 and
-`docs/ARCHITECTURE.md` Section 11.
+provider, caret geometry, caret-anchored suggestion span, accept/dismiss events)
+ship inert in 1.0 so the engine is never retrofitted. See DL-003, DL-014,
+DL-018 and `docs/ARCHITECTURE.md` Section 10.
+
+Work is planned in **turns with a verification recipe per task**, not in weeks
+(DL-019): see `docs/PLAN.md` and `docs/WORKFLOW.md` Section 13.
 
 ## Why port it
 
@@ -52,6 +59,8 @@ backlog.csv          task backlog (IDs match the issue tracker)
 ```
 
 Adapter crates are empty on other platforms, so the workspace builds everywhere.
+Crate names keep the `openkey-` prefix to stay traceable to upstream; the
+product is GoKey.
 
 ## Quickstart
 
@@ -75,12 +84,12 @@ for the first green build.
 | --- | --- |
 | `docs/CHARTER.md` | Objective, scope, constraints, stakeholders, success measures |
 | `docs/ARCHITECTURE.md` | Crate graph, core contract, platform mechanics, capability matrix |
-| `docs/PLAN.md` | Milestones M0–M5, gates, critical path, capacity |
-| `docs/TEAM.md` | Roles, kickoff roster, RACI, onboarding, decision rights |
-| `docs/WORKFLOW.md` | Branching, review, CI gates, cadence, release checklist, escalation |
+| `docs/PLAN.md` | Milestones M0–M6, turn budgets, gates, critical path |
+| `docs/TEAM.md` | Roles, ownership, kickoff roster, RACI, decision rights |
+| `docs/WORKFLOW.md` | Branching, review, CI gates, cadence, verification recipes, release checklist |
 | `docs/RISKS.md` | Risk register with owners and triggers |
 | `docs/DECISIONS.md` | Decision log, open items blocking milestones |
-| `backlog.csv` | 65 tasks with owners, dependencies and acceptance criteria |
+| `backlog.csv` | 69 tasks with owners, dependencies, turn estimates and verification recipes |
 | `tests/corpus/README.md` | Parity corpus format and review rules |
 
 ## Licensing
@@ -90,10 +99,13 @@ build must ship both and must make source available for that exact version.
 
 ## Next action
 
-Start M0: staff R1, R2, R3, R4, R5, R6 and the macOS spike (R7); the first three
-deliverables are the reference harness (K-003), corpus v0 (K-004), and the
-macOS adapter decision (K-008).
+Start M0 against its 20-turn budget: staff R1, R2, R3, R4, R5, R6 and the macOS
+spike (R7); the first three deliverables are the reference harness (K-003),
+corpus v0 (K-004), and the macOS adapter decision (K-008). Each task closes only
+when its verification recipe has been run and recorded.
 
-Decisions confirmed: macOS-only 1.0 (DL-003, DL-014). Still open: public name
-(DL-010), AI feature order (DL-015), and staffing commitment for `docs/TEAM.md`
-Section 1.
+Decisions confirmed: GoKey as the public name with a public repository (DL-010),
+macOS-only 1.0 (DL-003, DL-014), suggest-don't-auto-correct AI interaction
+(DL-018), turns as the planning unit (DL-019), `centopw` as public owner
+(DL-020). Still open: AI feature order (DL-015), settings UI stack (DL-009),
+macOS integration (DL-004).

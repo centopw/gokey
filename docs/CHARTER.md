@@ -1,6 +1,10 @@
-# Charter — openkey-rs
+# Charter — GoKey
 
-Working name. Public name is undecided (see DL-010).
+**Project name: GoKey** (Vietnamese copy: "Gõ Key"). Public owner: Hiep Nguyen,
+`@centopw` — every published artifact names him. Operating owner: the Project
+Administrator (Waker R1), who runs plan, risk, routing and verification
+(DL-020). GPL-3.0 derivative of [OpenKey](https://github.com/tuyenvm/OpenKey);
+upstream is credited in `NOTICE.md` and the About dialog (DL-010).
 
 ## 1. Objective
 
@@ -30,10 +34,10 @@ testable core.**
 | O2 | One core | Platform-specific code share | Core contains zero OS calls; adapters < 20% of LOC |
 | O3 | Cross-platform by design | 1.0 platforms / post-1.0 platforms | 1.0 ships macOS 13+ (arm64 + x86_64). Windows 10/11 and Linux (GNOME + KDE) follow on the same unchanged core |
 | O4 | Latency | Keystroke decision time, p99 | <=2 ms end-to-end, <=0.5 ms in core |
-| O5 | Stability | Crash-free sessions in beta | >=99.9% over 3 weeks |
+| O5 | Stability | Crash-free sessions in beta | >=99.9% across at least 1,000 dogfood sessions |
 | O6 | Privacy | Typed content logged or persisted | Zero, by design and review |
 | O7 | Maintainability | New input method or charset | Implementable in one crate, behind tests |
-| O8 | AI-ready, not AI-shipping | Extension seams present in 1.0 | Context provider, caret geometry, suggestion channel and accept/reject events defined and compile-tested with no AI dependency in `openkey-core`; zero network surface in the 1.0 binary |
+| O8 | AI-ready, not AI-shipping | Extension seams present in 1.0 | Context provider, caret geometry, suggestion channel with a caret-anchored span, and accept/dismiss events defined and compile-tested, with no AI dependency in `openkey-core`; zero network surface in the 1.0 binary |
 
 ## 4. In scope for 1.0
 
@@ -47,14 +51,18 @@ testable core.**
 - Convert tool (transcode text between charsets).
 - Settings UI, menu bar control, global enable hotkey.
 - Packaging, code signing/notarisation, signed dmg, vi/en user docs — **macOS only for 1.0**.
-- Architecture seams for future AI assist: text-context provider, caret geometry, suggestion channel, accept/reject events, `ai` settings section (all inert and off in 1.0).
+- Architecture seams for future AI assist: text-context provider, caret geometry,
+  suggestion channel carrying a caret-anchored `range` + `replacement`, accept
+  and dismiss events, `ai` settings section — all inert and off in 1.0.
 
 ## 5. Out of scope for 1.0
 
 - Mobile (iOS, Android), browser extension, web demo.
 - Cloud sync, accounts, user profiles.
 - Windows and Linux implementations in 1.0 — they are post-1.0 milestones (M4, M5) on the same core.
-- AI features in 1.0: inline completion, ghost typing, next-word prediction, rewrite. The seams ship, the features do not (M6).
+- AI features in 1.0: inline correction of the word at the caret, ghost
+  completion, next-word prediction, rewrite. The seams ship, the features do
+  not (M6).
 - Windows TSF-native implementation (v2 candidate, ADR-0005).
 - Fcitx5 addon (v2 candidate, ADR-0006).
 - Telemetry/analytics of any kind (privacy stance is a product feature).
@@ -67,7 +75,8 @@ testable core.**
 | Type | Constraint | Impact |
 | --- | --- | --- |
 | License | GPL-3.0-only inherited from upstream | Whole port is GPL-3.0; no closed-source reuse; must ship LICENSE/NOTICE |
-| Naming | "OpenKey" mark is not granted by GPL | Public name requires upstream author agreement (DL-010) |
+| Naming | Public name is GoKey (DL-010); "OpenKey" is not ours to use | Upstream credited in NOTICE; package/trademark clearance by R13 before the first public binary |
+| Planning | Work is estimated and tracked in turns with recorded verification (DL-019) | No calendar estimate is a commitment; progress is turns spent vs turns budgeted, per gate |
 | macOS | Event taps / accessibility APIs need user-granted Accessibility permission | Onboarding UX + security review required |
 | Windows | Keyboard hooks raise antivirus false positives; distributables need Authenticode | Signing budget + AV submissions |
 | Linux | Wayland forbids global key capture; must be an input-method engine | IBus/Fcitx5 integration, not a hook |
@@ -79,21 +88,28 @@ testable core.**
 
 | Role | Who | Interest |
 | --- | --- | --- |
-| Sponsor / budget owner | TBD — must be named before M1 | Scope, staffing, dates, release approval |
-| Upstream author | Mai Vu Tuyen (courtesy contact) | Attribution, name, direction |
+| Sponsor and public owner | Hiep Nguyen, `@centopw` (`hiep@hce.vn`) | Scope, staffing, release approval; every published artifact names him |
+| Operating owner / program manager | Project Administrator (Waker R1) | Plan, risks, decisions, routing, verification evidence |
+| Upstream author | Mai Vu Tuyen (courtesy contact) | Attribution, direction |
 | End users | Vietnamese typists on macOS/Windows/Linux | Same behaviour, plus Linux |
 | Existing macOS/Windows users | OpenKey install base | No regressions, migration of settings |
-| Security reviewer | TBD | Permission model, no keylogging surface |
+| Security reviewer | R12 (Waker) | Permission model, no keylogging surface |
 | Community / contributors | Open-source Rust + Vietnamese IME community | Buildable, documented, welcoming |
+
+Ownership rule (DL-020): the repository, releases, package names and any public
+page carry `centopw`. The Waker identity appears only in internal routing, never
+in a published document or commit author.
 
 ## 8. Assumptions (must be confirmed)
 
-1. Staffing described in `TEAM.md` is available; 5 engineers at kickoff.
+1. Staffing described in `TEAM.md` is available; the five-Waker working group
+   (R1–R7 lane coverage) is in place at kickoff.
 2. macOS is the first adapter, then Windows, then Linux (DL-003).
-3. Upstream author is reachable and cooperative about naming.
+3. Upstream author is reachable and cooperative about attribution.
 4. A reference C++ build of the engine can be compiled and driven headlessly.
-5. No commercial deadline; macOS 1.0 within ~17 weeks of kickoff is acceptable
-   (all-platform parity, M4–M5, adds another ~14 weeks; AI features M6 come later).
+5. Effort is planned in turns with a verification gate (DL-019); no external
+   deadline forces a calendar commitment. Windows/Linux (M4–M5) and AI (M6) sit
+   outside the 1.0 turn budget.
 6. Settings migration from upstream is "best effort", not guaranteed lossless.
 
 ## 9. Governance

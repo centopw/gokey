@@ -18,14 +18,18 @@ Platform front-ends are original Rust code but remain bound by the same license.
 
 ## Name and marks
 
-The name "OpenKey" and its icon are used by the upstream project. GPL does not
-grant trademark rights. The public name of this port is **not yet decided**
-(decision DL-010); until the upstream author is contacted and a name is agreed,
-this repository uses `openkey-rs` as an internal working name only and publishes
-no binaries.
+The name "OpenKey" and its icon belong to the upstream project. GPL does not
+grant trademark rights.
+
+The public name of this port is **GoKey** (Vietnamese: "Gõ Key"), decided in
+DL-010. "OpenKey" appears here and in the About dialog as attribution only —
+never as the product name, package name or icon. Crate names keep the
+`openkey-` prefix so the port stays traceable to its upstream sources.
 
 ## Attribution obligations
 
 - Keep this NOTICE and `LICENSE` in every distributed binary and source archive.
 - Any modified version must remain GPL-3.0 and state that it is modified.
 - Do not imply endorsement by the upstream author.
+- Published artifacts, releases and package identifiers are owned by
+  `centopw` (`hiep@hce.vn`), per DL-020.

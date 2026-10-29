@@ -141,6 +141,7 @@ Platform differences are visible in the product, so they are data, not surprises
 | Focus/app identity | yes | yes | yes |
 | Read text near caret | yes (AX) | partial (UIA) | preedit only |
 | Caret geometry for overlay | yes (AX `kAXBoundsForRange`) | partial | no |
+| Replace span left of caret (backspace + type) | yes | yes | preedit only |
 | Secure-field detection | yes (AX secure text) | partial | n/a |
 | Per-key emission fallback | yes | yes | not needed |
 | System input-source switching | partial | partial | required |
@@ -197,7 +198,7 @@ keycode table was compiled in. The harness normalises both sides to logical keys
 | Key content | Never logged, never persisted; session buffer is in-memory only |
 | Panics | `catch_unwind` at the FFI/event boundary; engine must be panic-free |
 
-## 11. AI assist extension points (seams ship in 1.0, features post-1.0)
+## 10. AI assist extension points (seams ship in 1.0, features post-1.0)
 
 AI is not in the keystroke path. The engine stays deterministic; assist features
 live in a separate crate that observes text and proposes edits.
@@ -207,7 +208,7 @@ live in a separate crate that observes text and proposes edits.
 pub struct CaretRect { pub x: f64, pub y: f64, pub height: f64 }
 
 pub struct TextContext {
-    pub before_caret: String,   // bounded, e.g. 512 chars
+    pub before_caret: String,   // bounded, e.g. 512 chars; caret is the end of this
     pub app: AppId,
     pub secure: bool,
 }
@@ -219,13 +220,58 @@ pub trait ContextProvider {
 }
 
 // openkey-ai (post-1.0, never linked into the 1.0 binary)
-pub struct Suggestion { pub text: String, pub confidence: f32 }
+pub struct Suggestion {
+    /// Byte range inside `TextContext::before_caret`. Must end at the caret.
+    pub range: Range<usize>,
+    pub replacement: String,
+    pub kind: SuggestionKind,   // Correction | Completion
+    pub confidence: f32,
+}
+
 pub trait SuggestionEngine {
     fn suggest(&self, ctx: &TextContext) -> Option<Suggestion>; // worker thread
 }
 ```
 
-Rules:
+### 10.1 Correction lifecycle (DL-018)
+
+The user-facing behaviour, decided:
+
+1. The user types; the engine keeps its normal word buffer and never waits.
+2. After the word settles (no keystroke for 250 ms, or a word-break key), the
+   host asks for a suggestion using the text immediately before the caret.
+3. If the anchor word is wrong, the host highlights the span and paints the
+   replacement inline — the original text stays in the document, unmodified.
+4. `Tab` accepts: backspace over the span, type the replacement, one undo unit,
+   caret to the end of the inserted text, engine buffer reset.
+5. `Esc` dismisses: nothing is emitted, and that span is not offered again.
+6. If the user keeps typing, the suggestion is dropped and the text is
+   untouched. A new suggestion appears only for a different anchor word.
+
+State machine (one suggestion at a time, per focus session):
+
+```
+Idle --word settled--> Query --engine reply--> Offered
+Offered --Tab--> Accepted --> Idle
+Offered --Esc--> Dismissed --> Idle (span remembered)
+Offered --any keystroke--> Dropped --> Idle
+Query --caret moved / focus lost / secure field--> Idle
+```
+
+Binding constraints:
+
+- **Caret-anchored only.** `range.end == before_caret.len()`. Accepting is then
+  always "delete backwards, type forwards", which every adapter can do with the
+  primitives it already has. Corrections that would need a selection or a
+  forward deletion are out of scope until there is a selection API (ADR-0007).
+- **No auto-correct.** A false positive that moves the caret mid-word is worse
+  than a missed correction.
+- **One suggestion per anchor.** A dismissed or dropped anchor is remembered, so
+  the same error is not re-offered until the text around it changes.
+- **Secure and non-text fields never reach the provider.** The block is in the
+  host, not in the engine or the AI crate.
+
+### 10.2 Rules for both correction and completion
 
 1. **Never block typing.** Suggestions run off the key path, are cancelled by
    the next keystroke, and are dropped if older than 150 ms.
@@ -236,15 +282,17 @@ Rules:
 4. **Privacy.** Context is read only after explicit opt-in; secure fields and
    password managers return `None`; nothing is logged or persisted.
 5. **Graceful absence, not degradation.** If a platform cannot supply caret
-   geometry, assist features are hidden. This is a second reason macOS leads.
-6. **Rendering.** Ghost text is a non-activating overlay anchored to
-   `CaretRect`, not marked text — marked text reintroduces the underline
-   artefact (DL-017).
+   geometry or nearby text, assist features are hidden entirely. This is a
+   second reason macOS leads.
+6. **Rendering.** The overlay draws the highlighted span plus the replacement
+   and is non-activating; it is never marked text (DL-017).
 
-## 12. Open architecture decisions
+## 11. Open architecture decisions
 
 - ADR-0004: macOS CGEventTap vs InputMethodKit (spike K-008).
 - ADR-0005: Windows hook v1 vs TSF (report WIN-007).
 - ADR-0006: Linux IBus first vs Fcitx5 first; preedit strategy (LNX-002/LNX-006).
+- ADR-0007: whether a selection/range-replace primitive is worth the risk, and
+  what it unlocks for correction spans that do not end at the caret.
 - GUI stack for settings: native per platform vs a shared Rust UI toolkit.
 - Whether the core exposes a stable C ABI for embedders beyond our adapters.

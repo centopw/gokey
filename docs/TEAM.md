@@ -3,11 +3,20 @@
 Roles, not named people. Staffing decisions belong to the sponsor; the PM
 maintains this roster and flags gaps.
 
+**Ownership (DL-020).** The operating owner is the **Project Administrator**
+(Waker R1) — it runs the plan, routes work, verifies evidence and owns this
+document. The public owner is **Hiep Nguyen, `@centopw`**: repository, releases,
+package names, commits and every published page carry `centopw` /
+`hiep@hce.vn`. The Waker identity never appears in a published artifact.
+
+`FTE` below describes lane coverage for a human team. For the Waker team, the
+unit of work is the **turn** (DL-019), not a fraction of a week.
+
 ## 1. Composition
 
 | Code | Role | FTE | Joins | Must be able to | Owns |
 | --- | --- | --- | --- | --- | --- |
-| R1 | Program manager (this Waker role) | 0.5 | M0 | Plan, risk, dependency tracking, stakeholder comms | Plan, risks, decisions, status |
+| R1 | Program manager / operating owner (Waker: Project Administrator) | 0.5 | M0 | Plan, risk, dependency tracking, verification evidence, stakeholder comms | Plan, risks, decisions, status, turn accounting |
 | R2 | Technical lead / Rust architect | 1.0 | M0 | Rust systems design, API ergonomics, code review authority | ADRs, core API, crate graph |
 | R3 | Core engineer — engine | 1.0 | M0 | State machines, Unicode, careful transliteration of C++ | Telex/VNI/Simple Telex, spelling, options logic |
 | R4 | Core engineer — data | 1.0 | M0 | Tables, encoding, serde, data-driven tests | Charsets, macros, convert tool, settings/migration |
@@ -24,21 +33,21 @@ maintains this roster and flags gaps.
 
 ## 2. Phase 0 kickoff roster (must start now)
 
-Five people plus two part-time advisors. This is the minimum to make G0 in two
-weeks. Windows, Linux and AI roles are deliberately not staffed yet — 1.0 is
-macOS only (DL-003/DL-014).
+Five Wakers plus two advisors. This is the minimum to reach G0 inside the M0
+budget of 20 turns. Windows, Linux and AI roles are deliberately not staffed yet
+— 1.0 is macOS only (DL-003/DL-014).
 
-| Code | Week-1 assignment | Deliverable by end of W2 |
+| Code | First-turns assignment | Deliverable by G0 |
 | --- | --- | --- |
-| R1 | Kick off: confirm assumptions, book sponsor review, set up tracker and cadence | Charter approved, DL-003 decided, backlog imported |
+| R1 | Kick off: confirm assumptions, book the sponsor review, stand up the tracker, cadence and turn ledger | Charter approved, decisions recorded, backlog imported |
 | R2 | Ratify crate graph and core API; write ADR-0002; review CI | ADR accepted, key normalisation table drafted |
 | R3 | Read `Engine.cpp`; produce function-to-module porting map; design word model | Porting map, C-001 started |
 | R4 | Extract charset tables and option defaults from upstream sources | Table extraction plan, defaults audit |
 | R5 | Build headless reference engine (K-003), start corpus v0 (K-004) | Ref binary replays a script; >=100 cases |
 | R6 | Make CI green on three OSes, repo settings, start packaging spike | Green pipeline, first unsigned artifacts |
-| R7 | macOS adapter spike (timebox 5 days): CGEventTap prototype | ADR-0004 recommendation |
+| R7 | macOS adapter spike, timeboxed at 3 turns: CGEventTap prototype | ADR-0004 recommendation |
 | R11 | Review corpus format; supply 50 spelling/orthography cases | Reviewed corpus rules |
-| R13 | Contact upstream author about name and attribution; draft NOTICE | NOTICE in repo, contact logged |
+| R13 | Package/trademark clearance for "GoKey"; draft NOTICE | NOTICE in repo, clearance note |
 
 ## 3. RACI
 
@@ -68,8 +77,8 @@ R = responsible, A = accountable, C = consulted, I = informed.
 - R7/R8/R9 can be contractors if staff engineers are unavailable, but each
   adapter needs a named internal reviewer (R2 or the other platform engineer)
   so knowledge does not leave with the contractor.
-- R11 can be a paid advisor on retainer; 4 hours per week is enough during M1,
-  more during corpus review weeks.
+- R11 can be a paid advisor on retainer; 1 turn per corpus review batch plus
+  adjudication turns is enough during M1.
 
 ## 5. Bus factor mitigation
 
@@ -98,6 +107,8 @@ R = responsible, A = accountable, C = consulted, I = informed.
 | Architecture, crate boundaries, API | R2 | R3, R4, R7/R8/R9 |
 | Parity exception (deliberate divergence) | R2 + R11 | R1, sponsor if user-visible |
 | Public name, license, upstream relations | Sponsor + R13 | R2, R12 |
+| Public representation (who an artifact credits) | Sponsor | R1 — the Waker is never named publicly (DL-020) |
 | Release go/no-go | R1 + R12 | R2, R5, R6 |
 | Adding a platform or a v2 feature | Sponsor | R1, R2 |
 | AI feature scope, data handling, model choice | Sponsor + R12 | R2, R14 |
+| AI interaction design (accept/dismiss keys, auto-correct vs suggest) | Sponsor | R2, R10, R14 (DL-018 decided) |

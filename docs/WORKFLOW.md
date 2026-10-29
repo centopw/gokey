@@ -28,15 +28,15 @@ risk/rollback note (template in `.github/pull_request_template.md`).
 | Docs | 1 | None |
 | Emergency fix | 1 | Retrospective note within 48 h |
 
-Review SLA: first response within one working day. A PR idle for three days is
-raised in the weekly sync.
+Review SLA: first response within one turn. A PR with no review after two turns
+of its author's work is raised at the next gate checkpoint.
 
 ## 3. CI gates (blocking)
 
 `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` on Ubuntu, macOS
 and Windows, `cargo doc`, `cargo deny check` (license allowlist mirrors
 `deny.toml`), and the parity smoke suite once the harness exists. A red pipeline
-means no merge, no exceptions, including release week.
+means no merge, no exceptions, including the release turn.
 
 Nightly (non-blocking but triaged daily): full parity corpus, differential
 fuzzing, benchmark regression against the previous `main`, dependency audit.
@@ -51,18 +51,20 @@ fuzzing, benchmark regression against the previous `main`, dependency audit.
 - Extra labels: `needs-linguistics`, `needs-security`, `parity-diff`, `blocked`.
 
 Definition of Ready: objective stated, acceptance criteria testable, owner
-named, dependencies identified, no unresolved design question larger than a day.
+named, dependencies identified, verification recipe named, no unresolved design
+question larger than one turn.
 
 Definition of Done: code merged with tests; acceptance criteria demonstrated;
-parity cases added or explicitly waived; docs updated; changelog entry; no new
-`unsafe` without a `// SAFETY:` note and reviewer; CI green.
+**verification recipe run and its output recorded on the task**; parity cases
+added or explicitly waived; docs updated; changelog entry; no new `unsafe`
+without a `// SAFETY:` note and reviewer; CI green.
 
 ## 5. Decisions and ADRs
 
 - Any decision that is expensive to reverse gets an ADR in `docs/adr/NNNN-*.md`
   using the template below, and a row in `DECISIONS.md`.
 - ADR status: `proposed`, `accepted`, `superseded`, `rejected`.
-- Open decisions are reviewed at the weekly sync; the PM chases owners.
+- Open decisions are reviewed at every gate checkpoint; the PM chases owners.
 - Architecture decisions: R2 accepts. Scope/licence/naming: sponsor accepts.
 
 ADR template: Context, Decision, Alternatives considered, Consequences,
@@ -70,16 +72,19 @@ Follow-up tasks.
 
 ## 6. Cadence
 
+Cadence is event-driven, not calendar-driven (DL-019):
+
 | Event | When | Output |
 | --- | --- | --- |
-| Async daily update | Each person, before 10:00 local, in the team thread | Done / next / blockers |
-| Weekly sync (30 min) | Monday | Decision log updates, risk changes, dependency unblocks |
-| Biweekly demo | Every second Thursday | Working build, parity report, latency numbers |
-| Milestone review | End of each milestone | Gate decision (pass / conditional / fail) with evidence |
-| Release candidate | Monthly from M2 | Signed artifacts, release notes draft |
+| Turn log | After every turn, in the task thread | Task ID, what changed, verification output, turns spent, next action |
+| Dependency unblock | As soon as a blocker clears | Message to the blocked lane with the commit SHA |
+| Gate checkpoint | When a milestone's tasks are all verified, or its budget is 80% spent | Gate decision (pass / conditional / fail) with evidence |
+| Risk review | At each gate checkpoint and on any trigger hit | Risk register delta |
+| Demo | At each gate | Working build, parity report, latency numbers, known limitations |
 
-Rules for the sync: status first, then decisions needed, then risks. No
-narrative status reports; the board is the status.
+Rules for a turn log: evidence first, then blockers, then decisions needed. No
+narrative status reports; the verification output is the status. A turn without
+recorded evidence does not count as spent against the milestone budget.
 
 ## 7. Parity policy
 
@@ -120,18 +125,21 @@ Release checklist (all required for `1.x`):
 ## 10. Upstream and licensing
 
 - Credit OpenKey and Mai Vu Tuyen in NOTICE, README and the About dialog.
+- Published builds are named **GoKey** (DL-010); "OpenKey" appears only in
+  attribution text, never as the product name, package name or icon.
 - Do not merge Rust code into upstream; instead contribute bug reports,
   reproductions and documentation where useful, and keep the relationship warm.
 - Any binary distribution is a GPL-3.0 distribution: source must be available
   at the same version, and modifications must be stated.
-- No use of the OpenKey name or icon in a published build until DL-010 is closed.
 
 ## 11. Escalation
+
 | Situation | Escalate to | Within |
 | --- | --- | --- |
-| Blocker older than 2 days | PM (R1) | Same day |
-| Platform API dead end or permission change | Tech lead (R2) | 1 day; spike timeboxed at 5 days |
-| Scope change, extra platform, date slip | Sponsor via PM | Before any commitment |
+| Blocker older than 2 turns | PM (R1) | Same turn |
+| Platform API dead end or permission change | Tech lead (R2) | 1 turn; spike timeboxed at 3 turns |
+| Same task without measurable progress for 2 turns | Tech lead (R2) | Next turn |
+| Scope change, extra platform, gate slip | Sponsor via PM | Before any commitment |
 | Parity exception or user-visible divergence | R2 + R11, then PM | Before merge |
 | Security or privacy concern | R12 | Immediately |
 | Licence or naming risk | R13 + sponsor | Before any public artifact |
@@ -139,7 +147,7 @@ Release checklist (all required for `1.x`):
 ## 12. AI feature rules (post-1.0)
 
 - No AI feature work before G3 (macOS 1.0). Until then only the inert seams in
-  `ARCHITECTURE.md` are built.
+  `ARCHITECTURE.md` Section 10 are built.
 - Every AI feature ships behind its own flag, default off, with an opt-in that
   states exactly what text is read and where inference runs.
 - No context text in logs, telemetry, crash payloads, or off-device requests
@@ -148,9 +156,51 @@ Release checklist (all required for `1.x`):
   hard-blocked at the `ContextProvider` layer.
 - Suggestions never block the keystroke path: worker thread, cancellation on the
   next keystroke, enforced deadline (150 ms target).
-- Accepting a suggestion is a single undo unit and must not corrupt the engine's
-  word buffer; rejecting sends nothing.
-- Each feature needs an evaluation set and a measurable acceptance-rate target
-  before release.
+- **Correction suggestions follow DL-018 exactly:** highlight the error span,
+  paint the replacement, `Tab` accepts, `Esc` dismisses, never auto-correct,
+  one suggestion at a time, and never re-offer the same span after dismissal.
+  The span must end at the caret; a correction that needs a selection is a new
+  ADR, not a shortcut.
+- Continuing to type drops the suggestion and changes nothing in the document.
+  A new suggestion is allowed only when a different anchor word is wrong.
+- Accepting a suggestion is a single undo unit, resets the engine word buffer,
+  and must not corrupt the following keystrokes.
+- Each feature needs an evaluation set and a measurable target before release;
+  for correction the gate is false-positive rate, not only acceptance rate.
 - Any new model or runtime dependency needs a GPL-3.0-compatible licence review
   and a security review.
+
+## 13. Turn contract and verification recipes
+
+A turn is the unit of work (DL-019). It is complete only when all four parts
+exist:
+
+1. **Scope**: one task ID, one branch, one artifact increment.
+2. **Change**: the diff, small enough to review in one pass.
+3. **Verification**: the task's recipe run from a clean checkout, with the
+   command and a pass/fail summary pasted into the task thread.
+4. **Ledger**: turns spent, what was learned, next action or blocker.
+
+Recipes are referenced by ID in the `verify` column of `backlog.csv`:
+
+| ID | Recipe | Pass condition |
+| --- | --- | --- |
+| V-BUILD | `cargo build --workspace --all-targets` on Ubuntu, macOS, Windows | all three green; no new warnings |
+| V-TEST | `cargo test --workspace` | all pass; no ignored tests without a linked issue |
+| V-LINT | `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo deny check` | clean |
+| V-CORE | V-BUILD + V-TEST + `cargo test -p openkey-core` with `#![forbid(unsafe_code)]` intact | no `unsafe`, no `cfg(target_os)` in core |
+| V-PARITY | `openkey-cli replay --corpus tests/corpus --diff ref-engine` | agreement >= target, every diff classified |
+| V-MAC | build + install on a clean macOS 13+ machine, type the 20-sentence script | script reproduces expected text; latency p99 within budget |
+| V-DOC | docs build/link check; every changed claim cites a task or decision | no dead links, no unsupported claim |
+| V-SEC | R12 review of permissions, data flows, and dependency licences | written sign-off with date |
+| V-REL | release checklist in Section 8, executed on a clean machine | every checklist item evidenced |
+| V-AI | evaluation set run, precision/acceptance reported, secure-field block tested | metrics meet the flag's target; block proven |
+
+Rules:
+
+- A recipe is run by the author, not the reviewer; the reviewer checks that the
+  output matches the recipe.
+- If a recipe cannot run (missing machine, missing upstream build), that is a
+  blocker, not a waiver. Escalate within one turn.
+- Two failed repair attempts on the same task stop the loop: escalate per
+  Section 11 instead of spending a third turn on the same approach.
