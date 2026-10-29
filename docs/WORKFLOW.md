@@ -10,10 +10,11 @@ contractors.
   `spike/<slug>` (spikes are never merged; they produce an ADR).
 - Conventional Commits: `feat(core): ...`, `fix(macos): ...`,
   `docs(plan): ...`. Scope is the crate or area, not the person.
-- Squash merge only. The PR title becomes the commit subject and must carry
-  the task ID.
+- Squash merge only, enforced in repository settings (merge commits and rebase
+  merges are disabled; the branch is deleted on merge). The PR title becomes
+  the commit subject and must carry the task ID.
 - No direct pushes to `main`, no force pushes, no self-merge on core or
-  platform adapters.
+  platform adapters. Enforced by branch protection (DL-024), not by convention.
 
 ## 2. Pull requests
 
@@ -22,7 +23,7 @@ risk/rollback note (template in `.github/pull_request_template.md`).
 
 | Area | Required approvals | Extra rule |
 | --- | --- | --- |
-| `openkey-core` | 2 (one must be R2) | Parity impact statement mandatory; if R2 authored the PR, R3 or R7 reviews and R1 records the approval |
+| `openkey-core` | 2 (one must be R2) | Parity impact statement mandatory; when R2 authored the PR, DL-025 applies — a non-authoring lane reviews with the comment-only certification, preferring R3 then R7 — and R1 records the approval |
 | Platform adapters | 1 platform owner + 1 other engineer | Permission or security impact noted |
 | CI, packaging, signing | 1 (R6 or R2) | Must show artifact from the branch |
 | Docs | 1 | None |
@@ -34,6 +35,24 @@ different **role** therefore counts when it is a `COMMENTED` review that starts
 with `VERDICT: APPROVE` or `VERDICT: REQUEST CHANGES` and lists the commands
 run. The reviewer must be a different role from the author; self-approval in any
 form does not count. R1 records the merge approval in the turn ledger.
+
+Because of that constraint, branch protection requires the status checks but not
+a GitHub review approval (DL-024). The table above is still the rule: a merge
+without a recorded verdict from the named role is a process defect and is
+raised at the next gate checkpoint.
+
+Reviewer independence (DL-025): when the lane that authored a PR also holds the
+only eligible reviewer role, any other lane may review it, provided the reviewer
+runs the task's verification recipes itself and pastes the output, and, for
+`openkey-core`, certifies from the diff that no executable logic changed. A
+logic change in `openkey-core` still waits for a second engineering lane. R1
+records this as a compensating control until R3 and R7 are staffed.
+
+`main` protection (DL-024): the nine required checks are `secrets`,
+`build-test` on Ubuntu, macOS and Windows, `licenses`, `parity`, `core-purity`,
+`no-network` and `sbom`; the branch must be up to date with `main` before
+merging; linear history is required; force pushes and branch deletion are
+refused; the rules apply to administrators too.
 
 Review SLA: first response within one turn. A PR with no review after two turns
 of its author's work is raised at the next gate checkpoint.
@@ -103,7 +122,7 @@ recorded evidence does not count as spent against the milestone budget.
 
 ## 8. Release and versioning
 
-Semantic versioning. `0.x` until G5, then `1.0.0`. Pre-releases: `0.x.y-alpha.N`,
+Semantic versioning. `0.x` until G3, then `1.0.0`. Pre-releases: `0.x.y-alpha.N`,
 `-beta.N`.
 
 Release checklist (all required for `1.x`):

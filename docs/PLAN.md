@@ -82,8 +82,11 @@ day one. Windows, Linux and AI stay off the 1.0 critical path.
 ## 6. Capacity and rework
 
 - The working group is five Wakers: R1 program manager (Project Administrator),
-  plus PM, backend, front-end and DevOps lanes; macOS platform work (R7) shares
-  the backend lane until M2.
+  plus PM, backend, front-end and DevOps lanes; macOS platform work (R7) is held
+  by the FE lane from M0 until a dedicated macOS engineer is staffed (DL-004),
+  and the backend lane carries the engine work (R3, plus R5 as interim).
+  Of the 100 task turns in 1.0, R5 (17) and R7 (15) still have no permanent
+  owner — see TURN-LEDGER.md §2 and PLAN §6's staffing cliff.
 - Post-1.0 phases add one platform lane each; AI adds R14.
 - Each milestone budget already carries a 15% fix reserve. A milestone that
   spends more than 25% of its budget on rework is re-planned at the gate, not

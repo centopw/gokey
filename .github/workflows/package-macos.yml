@@ -1,6 +1,6 @@
 name: package-macos
 
-# G5 — the artefact gate (ADR-0008 §2). Starts at M0 because K-007's acceptance is
+# tier 5 — the artefact gate (ADR-0008 §2). Starts at M0 because K-007's acceptance is
 # "artifacts produced; time-to-artifact documented", i.e. it *is* a CI artefact job.
 #
 # Ad-hoc signed, no tag, no GitHub Release, not notarised, not linked from anywhere.
