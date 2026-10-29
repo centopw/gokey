@@ -183,8 +183,11 @@ pub struct Outcome {
   reads it). GoKey's loader therefore rewrites `false` on load and 1.0 ships no
   UI toggle. Per C-013's acceptance this is *persistence refused*, not new
   behaviour, and it is DL-013 (reproduce upstream) applied to a dead control.
-- C-007 is dissolved; grammar repositioning is covered by C-002's corpus block
-  under ON-by-default behaviour.
+- C-007 is **re-scoped, not deleted**: `backlog.csv` now holds "Corpus coverage for
+  grammar repositioning (free_mark gate); no standalone feature" (R5, depends on
+  C-002, V-PARITY), and its acceptance already requires that no `vCheckGrammar`
+  option exists in `Options`. The gate itself is ported with C-002, ON by
+  default.
 
 ### D7 — R-API-5 and option placement: `Options` holds only what the engine reads
 
