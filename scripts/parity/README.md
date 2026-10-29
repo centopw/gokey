@@ -16,11 +16,19 @@ python3 scripts/parity/compare.py some.tsv <( \
 ```
 
 `parity.sh` verifies the pin first (`scripts/ci/check-oracle-pin.py`), fetches the
-upstream tree by **commit hash** at `docs/m0/ORACLE-PIN.json → upstream.commit`
+upstream tree by **commit hash** at `parity/oracle/pin.json → upstream.commit`
 if `.oracle/src` is absent, builds with plain `clang++ -std=c++17 -O2 -w`, then
 replays `scripts/parity/smoke.tsv` and every `tests/corpus/*.tsv` it finds. A case
 whose `expected` column is absent is replayed but not judged; a case whose
 `expected` column disagrees fails the script.
+
+`parity/oracle/pin.json` is the machine-read copy of the record the decisions are
+argued from, `docs/m0/ORACLE-PIN.json` (PORTING-MAP §5). The two must be the same
+bytes, and the checker is what enforces that: it prints both sha256 digests and
+exits 1 if they differ, and exits 2 if either file is missing, before it fetches
+anything. A copy that has drifted is not a second opinion — it is a second truth,
+so refresh it from the record (`cp docs/m0/ORACLE-PIN.json parity/oracle/pin.json`)
+rather than editing it.
 
 The build adds `-include algorithm` because upstream `ConvertTool.cpp:169` calls
 `std::find` without including `<algorithm>`: libc++ pulls the header in
@@ -30,7 +38,8 @@ just verified — and picks the same `std::find`.
 
 ## Pin and platform
 
-- The normative platform is **macOS** (`docs/m0/ORACLE-PIN.json`, DL-026). The
+- The normative platform is **macOS** (`parity/oracle/pin.json`, i.e.
+  `docs/m0/ORACLE-PIN.json`, DL-026). The
   harness is therefore compiled **without** `-DLINUX` / `-D_WIN32`; a compile-time
   `#error` enforces it. `DataType.h:84-90` picks the keycode header by ifdef, so
   defining `LINUX` would change `KEY_A` from 0 to 38 and reorder the

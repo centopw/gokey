@@ -11,12 +11,31 @@ useDefault = true
 
 [allowlist]
 description = "Checksum and hash manifests (digests of sources, not credentials)"
+# Paths, and only paths: gitleaks applies an allowlist to the whole finding, so an
+# entry here trusts the file rather than matching its lines. `parity/oracle/pin.json`
+# is byte-identical to `docs/m0/ORACLE-PIN.json` (enforced by
+# `scripts/ci/check-oracle-pin.py`, exit 1 on any difference), so the second entry
+# adds no content to this footprint — it only stops the same reviewed bytes from
+# tripping the rule at a second path, which is what happened when K-003 committed
+# the copy.
+#
+# Maintenance rule: a new digest manifest gets a path here, in review, alongside the
+# file. There is no content-scoped alternative in gitleaks 8.30.1, and two tempting
+# ones were measured and rejected:
+#
+#   - `regexes` alone never fire. They are matched against the *detected secret* —
+#     for generic-api-key, the 64-hex digest with nothing else on it — so a pattern
+#     anchored on the `"File.cpp": "…"` shape cannot match. The entry that used to
+#     sit here was dead code that read as protection.
+#   - `regexTarget = "line"` does make those patterns fire, but the allowlist stays
+#     global: any line carrying a checksum is then allowlisted in every file,
+#     including a real key placed next to one. Probed, and it does hide it.
+#     `condition = "AND"` was the intended fix for that (path AND line), and 8.30.1
+#     ignores it for this purpose: a secret on a non-digest line inside a listed
+#     path is still allowlisted under AND and under OR alike. Probed both ways.
 paths = [
   '''docs/m0/ORACLE-PIN\.json''',
+  '''parity/oracle/pin\.json''',
   '''(?i)(^|/)SHA256SUMS$''',
   '''(?i)\.sha256$''',
-]
-regexes = [
-  # "SomeFile.cpp": "322218b6...a794d3" — a pinned source hash, not a key.
-  '''"[^"]+\.(cpp|h|hpp|mm|m|rs)":\s*"[0-9a-f]{64}"''',
 ]

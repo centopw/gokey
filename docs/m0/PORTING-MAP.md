@@ -395,8 +395,9 @@ do not “fix while porting”.
 
 ## 5. PG-01 — pinned oracle and corpus baseline
 
-`ORACLE-PIN.json` is the record. It ships as `docs/m0/ORACLE-PIN.json` in this PR; K-003 moves the
-machine-read copy to `parity/oracle/pin.json` and `scripts/parity.sh` fails if the two disagree.
+`ORACLE-PIN.json` is the record. It ships as `docs/m0/ORACLE-PIN.json`, and the machine-read copy
+`parity/oracle/pin.json` must be the same bytes: `scripts/parity.sh` runs
+`scripts/ci/check-oracle-pin.py`, which exits 1 if the two disagree and 2 if either is missing.
 How the harness consumes it, using the artefacts the scaffold already has:
 
 ### 5.1 Pin
@@ -415,7 +416,7 @@ The scaffold already defines the file format (`tests/corpus/README.md`: TSV,
 warning). Completion of PG-01 is therefore:
 
 ```
-parity/oracle/pin.json              # committed copy of ORACLE-PIN.json
+parity/oracle/pin.json              # committed copy of ORACLE-PIN.json, byte for byte
 tests/corpus/*.tsv                  # human-authored cases (format already specified)
 parity/baseline/<commit>/<id>.txt   # rendered document text per case, from the oracle
 parity/baseline/<commit>/MANIFEST.json  # case list + per-case sha256 + oracle pin hash

@@ -5,7 +5,8 @@ The checker's dangerous failure mode is a false *pass*: if it reported success
 against a tree that is not the pin, every corpus baseline generated from that
 tree would carry a claim about an unknown engine. So each test below pins one
 way the check can go wrong — a corrupted file, a missing file, a pin that is not
-the pin — plus a positive case so the suite cannot pass vacuously.
+the pin, a copy that drifted from its record — plus a positive case so the suite
+cannot pass vacuously.
 
 No test touches the network: `fetch()` is exercised on its cache-reuse branch and
 `verify()` on a temporary source tree.
@@ -17,11 +18,13 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import io
 import json
 import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
 
 MODULE_PATH = Path(__file__).with_name("check-oracle-pin.py")
@@ -104,14 +107,33 @@ class Verify(unittest.TestCase):
 
 
 class Main(unittest.TestCase):
-    def run_main(self, pin: dict, source: Path) -> int:
+    def run_main(self, pin: dict, source: Path, record: bytes | None = None,
+                 write_record: bool = True) -> tuple[int, str]:
+        """Run `main()` against a temp layout shaped like the repo.
+
+        The copy and the record are separate files, because the whole point of
+        the pair is the check that they agree. `record` overrides the bytes
+        written to the record; the default is the same bytes as the copy, i.e.
+        an in-sync pair. `write_record=False` models the record being absent.
+        """
         with tempfile.TemporaryDirectory() as tmp:
-            pin_path = Path(tmp) / "ORACLE-PIN.json"
-            pin_path.write_text(json.dumps(pin), encoding="utf-8")
+            repo = Path(tmp)
+            body = json.dumps(pin).encode("utf-8")
+            copy_path = repo / "parity" / "oracle" / "pin.json"
+            record_path = repo / "docs" / "m0" / "ORACLE-PIN.json"
+            copy_path.parent.mkdir(parents=True)
+            record_path.parent.mkdir(parents=True)
+            copy_path.write_bytes(body)
+            if write_record:
+                record_path.write_bytes(body if record is None else record)
+
             argv = sys.argv
-            sys.argv = [str(MODULE_PATH), "--pin", str(pin_path), "--source", str(source)]
+            sys.argv = [str(MODULE_PATH), "--pin", str(copy_path),
+                        "--record", str(record_path), "--source", str(source)]
+            err = io.StringIO()
             try:
-                return checker.main()
+                with redirect_stderr(err):
+                    return checker.main(), err.getvalue()
             finally:
                 sys.argv = argv
 
@@ -120,7 +142,8 @@ class Main(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             write_tree(root, files)
-            self.assertEqual(self.run_main(make_pin(files), root), 0)
+            rc, err = self.run_main(make_pin(files), root)
+        self.assertEqual((rc, err), (0, ""))
 
     def test_corrupted_source_exits_one(self) -> None:
         files = {"engine/Engine.cpp": b"// engine\n"}
@@ -128,13 +151,80 @@ class Main(unittest.TestCase):
             root = Path(tmp)
             write_tree(root, files)
             (root / "engine/Engine.cpp").write_bytes(b"// patched\n")
-            self.assertEqual(self.run_main(make_pin(files), root), 1)
+            self.assertEqual(self.run_main(make_pin(files), root)[0], 1)
 
     def test_foreign_schema_is_refused_not_treated_as_current(self) -> None:
         pin = make_pin({})
         pin["schema"] = "gokey.oracle-pin/v0"
         with tempfile.TemporaryDirectory() as tmp:
-            self.assertEqual(self.run_main(pin, Path(tmp)), 2)
+            self.assertEqual(self.run_main(pin, Path(tmp))[0], 2)
+
+    def test_a_copy_that_drifted_from_the_record_exits_one(self) -> None:
+        # A whitespace-only difference is still a difference: the two files are
+        # read and edited by different people, so "same JSON" is not the
+        # invariant — the same bytes are.
+        files = {"engine/Engine.cpp": b"// engine\n"}
+        pin = make_pin(files)
+        drifted = json.dumps(pin, indent=2).encode("utf-8")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_tree(root, files)
+            rc, err = self.run_main(pin, root, record=drifted)
+        self.assertEqual(rc, 1)
+        self.assertIn("not the same bytes", err)
+        # Both digests, so the report says which side moved without a second run.
+        self.assertIn(sha256(drifted), err)
+        self.assertIn(sha256(json.dumps(pin).encode("utf-8")), err)
+        # And the remediation names the direction: the copy is derived.
+        self.assertIn("cp ", err)
+
+    def test_a_missing_record_exits_two(self) -> None:
+        files = {"engine/Engine.cpp": b"// engine\n"}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_tree(root, files)
+            rc, err = self.run_main(make_pin(files), root, write_record=False)
+        self.assertEqual(rc, 2)
+        self.assertIn("pin record not found", err)
+
+    def test_a_missing_machine_copy_exits_two(self) -> None:
+        # Deleting the copy must not fall back to the record: the path CI
+        # verifies is the one that has to exist.
+        files = {"engine/Engine.cpp": b"// engine\n"}
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            source = repo / "source"
+            write_tree(source, files)
+            record = repo / "docs" / "m0" / "ORACLE-PIN.json"
+            record.parent.mkdir(parents=True)
+            record.write_text(json.dumps(make_pin(files)), encoding="utf-8")
+            argv = sys.argv
+            sys.argv = [str(MODULE_PATH),
+                        "--pin", str(repo / "parity" / "oracle" / "pin.json"),
+                        "--record", str(record), "--source", str(source)]
+            err = io.StringIO()
+            try:
+                with redirect_stderr(err):
+                    rc = checker.main()
+            finally:
+                sys.argv = argv
+        self.assertEqual(rc, 2)
+        self.assertIn("pin not found", err.getvalue())
+
+
+class CommittedCopies(unittest.TestCase):
+    def test_the_machine_copy_is_a_verbatim_copy_of_the_record(self) -> None:
+        # The invariant this PR adds is also a property of the checkout, so it is
+        # cheaper to pin it here than to discover the drift in a parity run that
+        # has already fetched the oracle.
+        repo = MODULE_PATH.parents[2]
+        copy_path = repo / "parity" / "oracle" / "pin.json"
+        record_path = repo / "docs" / "m0" / "ORACLE-PIN.json"
+        self.assertEqual(
+            copy_path.read_bytes(), record_path.read_bytes(),
+            "parity/oracle/pin.json must be a byte-for-byte copy of "
+            "docs/m0/ORACLE-PIN.json; refresh it from the record, not the other way round",
+        )
 
 
 class Fetch(unittest.TestCase):
