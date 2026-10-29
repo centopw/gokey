@@ -33,7 +33,13 @@ mkdir -p "$build"
 # pin's normative_platform is macOS (DL-026). A -DLINUX build would use a
 # different keycode convention and a different std::map iteration order (DEV-02),
 # and would silently stop being the same oracle.
-"$cxx" -std=c++17 -O2 -w -I "$engine" \
+#
+# -include algorithm: upstream ConvertTool.cpp:169 calls std::find without
+# including <algorithm>, which libc++ happens to pull in transitively and
+# libstdc++ does not. Forcing the header keeps the pinned tree byte-identical —
+# patching it would break the digests this job just verified — and cannot change
+# behaviour, because the overload libstdc++ picks is the same std::find.
+"$cxx" -std=c++17 -O2 -w -include algorithm -I "$engine" \
     -o "$build/harness" \
     scripts/parity/harness.cpp \
     "$engine/Engine.cpp" "$engine/Vietnamese.cpp" "$engine/Macro.cpp" \

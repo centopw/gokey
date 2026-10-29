@@ -22,6 +22,12 @@ replays `scripts/parity/smoke.tsv` and every `tests/corpus/*.tsv` it finds. A ca
 whose `expected` column is absent is replayed but not judged; a case whose
 `expected` column disagrees fails the script.
 
+The build adds `-include algorithm` because upstream `ConvertTool.cpp:169` calls
+`std::find` without including `<algorithm>`: libc++ pulls the header in
+transitively, libstdc++ (the CI runner's) does not. Forcing the header keeps the
+pinned tree byte-identical — patching it would break the digests the step above
+just verified — and picks the same `std::find`.
+
 ## Pin and platform
 
 - The normative platform is **macOS** (`docs/m0/ORACLE-PIN.json`, DL-026). The
