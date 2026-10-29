@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
-"""Verify the parity oracle's pin (docs/m0/ORACLE-PIN.json).
+"""Verify the parity oracle's pin (parity/oracle/pin.json).
 
 The corpus baselines are artefacts of one upstream commit. If the tree those
 baselines were generated from is not the tree this file names, every "agrees"
-in the parity report is a claim about an unknown engine. So the check has two
-halves, and the first one is the one that matters:
+in the parity report is a claim about an unknown engine. So the check has three
+parts, and all of them must hold before anything is built:
+
+0. **The copy is the record.** `docs/m0/ORACLE-PIN.json` is what a reader reads
+   and `parity/oracle/pin.json` is what CI verifies, as PORTING-MAP §5 requires.
+   Two files that can drift are worse than one, so this refuses to run unless
+   they are the same bytes. Equality is the whole point of the duplication: it
+   makes the machine copy safe to read instead of a second thing to trust.
 
 1. **Fetch by hash, never by ref.** ORACLE-PIN.json's `retrieval.caveat` says
    the tip can move; fetching `master` and comparing afterwards would mean the
@@ -14,7 +20,8 @@ halves, and the first one is the one that matters:
    store is trusted; the digests prove it to a reader who does not trust ours,
    and they catch a local `--source` checkout that was edited in place.
 
-Exit status: 0 verified, 1 mismatch, 2 could not run.
+Exit status: 0 verified, 1 mismatch (the copy disagrees with the record, or a
+pinned file digest differs), 2 could not run.
 """
 
 from __future__ import annotations
@@ -27,7 +34,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_PIN = ROOT / "docs" / "m0" / "ORACLE-PIN.json"
+DEFAULT_PIN = ROOT / "parity" / "oracle" / "pin.json"
+DEFAULT_RECORD = ROOT / "docs" / "m0" / "ORACLE-PIN.json"
 
 
 def run(cmd: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
@@ -81,6 +89,32 @@ def digest(path: Path) -> str:
     return h.hexdigest()
 
 
+def digest_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def compare(pin_path: Path, record_path: Path) -> list[str]:
+    """The machine copy must be the record, byte for byte (PORTING-MAP §5).
+
+    Byte equality rather than "the same JSON": the record carries prose that
+    decisions are argued from (`retrieval.caveat`, `known_deviations_from_oracle`),
+    so a copy that parses to the same commit but not to the same file would still
+    be a second document people read and edit separately. Both digests are printed
+    because the first question after a mismatch is which side moved.
+    """
+    copy_bytes = pin_path.read_bytes()
+    record_bytes = record_path.read_bytes()
+    if copy_bytes == record_bytes:
+        return []
+    return [
+        "::error::the machine pin and the record are not the same bytes; one was edited alone",
+        f"    record {record_path}  {digest_bytes(record_bytes)}",
+        f"    copy   {pin_path}  {digest_bytes(copy_bytes)}",
+        "    the copy is derived from the record, so make the edit on the record and refresh it:",
+        f"    cp {record_path} {pin_path}",
+    ]
+
+
 def verify(pin: dict, source: Path) -> list[str]:
     problems: list[str] = []
     files: dict[str, str] = dict(pin["engine_files_sha256"])
@@ -103,16 +137,28 @@ def verify(pin: dict, source: Path) -> list[str]:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--pin", type=Path, default=DEFAULT_PIN)
+    ap.add_argument("--pin", type=Path, default=DEFAULT_PIN,
+                    help="the machine-read copy this check verifies "
+                         "(default: parity/oracle/pin.json)")
+    ap.add_argument("--record", type=Path, default=DEFAULT_RECORD,
+                    help="the human record the copy must equal byte for byte "
+                         "(default: docs/m0/ORACLE-PIN.json)")
     ap.add_argument("--dest", type=Path, default=ROOT / ".oracle" / "src",
                     help="checkout cache for the pinned commit (created if absent)")
     ap.add_argument("--source", type=Path,
                     help="verify an existing checkout instead of fetching; no network")
     args = ap.parse_args()
 
-    if not args.pin.is_file():
-        print(f"::error::pin not found: {args.pin}", file=sys.stderr)
-        return 2
+    for label, path in (("pin", args.pin), ("pin record", args.record)):
+        if not path.is_file():
+            print(f"::error::{label} not found: {path}", file=sys.stderr)
+            return 2
+
+    problems = compare(args.pin, args.record)
+    if problems:
+        print("\n".join(problems), file=sys.stderr)
+        return 1
+
     pin = json.loads(args.pin.read_text(encoding="utf-8"))
     if pin.get("schema") != "gokey.oracle-pin/v1":
         print(f"::error::{args.pin} schema is {pin.get('schema')!r}, expected gokey.oracle-pin/v1",

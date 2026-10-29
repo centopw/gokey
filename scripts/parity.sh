@@ -6,6 +6,10 @@
 # clang++. It fetches the pinned upstream commit — network is available there —
 # and refuses to build if the resolved commit is not the pin.
 #
+# The pin step reads `parity/oracle/pin.json` and fails if that copy and the
+# human record `docs/m0/ORACLE-PIN.json` are not the same bytes (PORTING-MAP §5):
+# the file CI verifies and the file a reader reads may not drift apart.
+#
 # Exit status: 0 all cases agree, 1 at least one disagrees, 2 the run could not
 # start (pin, toolchain or checkout broken).
 set -euo pipefail
@@ -16,7 +20,8 @@ cd "$root"
 cache="${ORACLE_CACHE:-$root/.oracle/src}"
 build="${ORACLE_BUILD:-$root/.oracle/build}"
 cxx="${CXX:-clang++}"
-pin="docs/m0/ORACLE-PIN.json"
+pin="parity/oracle/pin.json"
+record="docs/m0/ORACLE-PIN.json"
 
 if ! command -v "$cxx" >/dev/null 2>&1; then
     echo "::error::no C++ compiler: '$cxx' not found (set CXX)" >&2
@@ -24,7 +29,15 @@ if ! command -v "$cxx" >/dev/null 2>&1; then
 fi
 
 echo "== pin =="
-python3 scripts/ci/check-oracle-pin.py --pin "$pin" --dest "$cache"
+# A pin that does not verify is "the run could not start" (exit 2), not "the
+# cases disagree" (exit 1): nothing has been replayed yet, and reporting it as
+# a behaviour disagreement would send the next reader looking for a wrong
+# baseline. The checker prints which half failed — copy vs record, or a pinned
+# file's digest.
+if ! python3 scripts/ci/check-oracle-pin.py --pin "$pin" --record "$record" --dest "$cache"; then
+    echo "::error::the oracle pin did not verify; nothing was replayed" >&2
+    exit 2
+fi
 
 echo "== build =="
 engine="$cache/Sources/OpenKey/engine"
