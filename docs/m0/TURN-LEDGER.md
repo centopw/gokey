@@ -31,9 +31,10 @@ Recipe IDs are the ones in `WORKFLOW.md` §13.
 | T2 | R6 DevOps | K-001 + K-007 (est 2 + 2) | #4 merged `c6c2777` | V-BUILD, V-MAC (ad-hoc dmg) | Gate ladder + pinned toolchain + first dmg artefact. Time-to-artifact measured on five runs: 23 s (`af30fc5`), 17 s (`1578a0a`), 21 s (`c6c2777`), 18 s (`ec75ea7`), 21 s (`a59f7b6`). The 23→17 s change was the `REQUEST CHANGES` repair, not a timing fix; the spread after it is runner noise | 2 |
 | T3 | R2 Backend | K-002 (est 1) | #5 open, 2 commits | V-DOC | ADR-0002 drafted; R6 issued `VERDICT: REQUEST CHANGES` at 09:52:02Z. Turn spent, task not closed | 3 |
 | T4 | R1 PM | — *(governance register)* | #6 open, 4 commits | V-DOC | DL-023 (CI artefacts internal-only), DL-024 (enforced merge policy), DL-025 (reviewer independence); `RISKS.md` RK-01 dispositioned | 4 |
-| T5 | R1 PM | — *(this ledger)* | #9, one commit | V-DOC | Turn log opened with turns as spent, not as estimated; exposes §4 | 5 |
+| T5 | R1 PM | — *(this ledger)* | #9, `6b48b10` plus this revision | V-DOC | Turn log opened with turns as spent, not as estimated; exposes §4. This revision counts the unbudgeted rounds in §4 and states §2's arithmetic in the same unit as §4.1(a) | 5 |
 
-Turns 1–5 are the whole of M0's evidenced spend. Everything else in M0 is either
+Rows T1–T5 are M0's task spend. They are not M0's total spend: §4 records nine
+further rounds that no backlog row accounts for. Everything else in M0 is either
 delivered without a turn row (K-006, K-007's own budget) or not started (K-003,
 K-004, K-005, K-008).
 
@@ -46,16 +47,18 @@ K-004, K-005, K-008).
 | K-003 Headless reference build | 2 | 0 | Not started (R5 interim → R3) |
 | K-004 Parity corpus v0 | 2 | 0 | Not started |
 | K-005 Corpus loader, replay, diff | 2 | 0 | Not started |
-| K-006 LICENSE, NOTICE, attribution | 2 | **unrecorded** | Artefacts present (`LICENSE`, `NOTICE.md` incl. upstream attribution and the name/marks section) but no turn row exists. Not counted; if it cost its estimate, M0 stands at 6 |
+| K-006 LICENSE, NOTICE, attribution | 2 | **unrecorded** | Artefacts present (`LICENSE`, `NOTICE.md` incl. upstream attribution and the name/marks section) but no turn row exists. Not counted; if it cost its estimate, M0 stands at 15 of 20 |
 | K-007 Packaging spike | 2 | 0 marginal | **Delivered inside T2** — see §5.1; the dmg job has since run on every merge to `main` |
 | K-008 Adapter spike | 3 | 0 | Not started (R7 unstaffed; FE interim, one turn) |
 | K-009 Kickoff | 1 | 1 | **Done** — scope, staffing and platform order confirmed at seq 7–39 (DL-003, DL-014) |
 
-Arithmetic: 4 turns evidenced of 20. Remaining estimate for open work is
-K-002 (1) + K-003 (2) + K-004 (2) + K-005 (2) + K-008 (3) = 10, and the 3-turn
-reserve is untouched on paper. If K-006 took its estimate, the remaining figure
-is 14 against 10 needed. Both are inside the budget; neither is a reason to slow
-down, and neither survives contact with K-004 if corpus authoring stalls.
+Arithmetic: **4 task turns** evidenced against 20. That is not M0's spend. Add
+the nine unbudgeted rounds in §4 and M0 has spent **13 of 20**, leaving 7 against
+a remaining task estimate of K-002 (1) + K-003 (2) + K-004 (2) + K-005 (2) +
+K-008 (3) = 10. The position is in §4.1(a): over budget on paper before the fix
+reserve is touched. If K-006 cost its 2 estimated turns it is 15 of 20 and the
+gap is 5. Neither number is a reason to slow down; the gap closes by giving the
+unbudgeted work a row, not by pretending the task turns are the whole of it.
 
 ## 3. Turns drawn from other milestones during M0
 
@@ -64,7 +67,7 @@ charging it to M0.
 
 | Lane | Task | Milestone | Artefact | Recipes | Result |
 |---|---|---|---|---|---|
-| R2 | C-001 (est 2) | M1 | #1 open, 6 commits | V-DOC | Porting map (66 symbols), pinned oracle, Rust word model. PM verdict on this turn |
+| R2 | C-001 (est 2) | M1 | #1 open, 7 commits | V-DOC | Porting map (66 symbols), pinned oracle, Rust word model. PM `REQUEST CHANGES` 09:58Z on `7bdad6a` (two label strings); repaired in `7de616e`, `APPROVE` 10:08Z |
 | R2 | C-013 (est 2) | M1 | #2 merged `a59f7b6` | V-CORE (DL-025 comment-only certification) | Comment and task-ID correction in `options.rs`; 8 added / 4 removed, no executable logic changed |
 
 Both are charged to M1's 51, not to M0's 20. This is the first draw on M1.
@@ -73,9 +76,10 @@ Both are charged to M1's 51, not to M0's 20. This is the first draw on M1.
 
 | # | Work | Lane | Turns | Why it has no row |
 |---|---|---|---|---|
-| U1 | Governance register: DL-019…DL-025, `WORKFLOW.md` §1/§2/§6, `RISKS.md` RK-01, `TEAM.md` gate correction, ADR-0008 gate rename | R1 | 4 (seq 70, seq 113, #6, seq 132 review round) | No backlog row covers process governance |
+| U1 | Governance register: DL-019…DL-025, `WORKFLOW.md` §1/§2/§6, `RISKS.md` RK-01, `TEAM.md` gate correction, ADR-0008 gate rename | R1 | 5 (seq 70, seq 113, #6, #8 review ×2) | No backlog row covers process governance |
 | U2 | Kickoff detours: repo access, `docs/` restore, `~/.gitignore_global` root cause | R1 + R2 | 2 (1 each) | Same; the work is real, the plan has no line for it |
 | U3 | This ledger | R1 | 1 | A process artefact cannot carry a task ID |
+| U4 | Re-review of #1 against the repair commit (`7de616e`) | R1 | 1 (10:08Z) | Review work on another lane's task is not a task turn of its own |
 
 ### 4.1 The three numbers the sponsor asked for
 
@@ -83,20 +87,20 @@ Both are charged to M1's 51, not to M0's 20. This is the first draw on M1.
 
 | Lane | Task turns | Unbudgeted turns | Total |
 |---|---|---|---|
-| R1 PM | 1 (T4) | 6 (U1 4, U2 1, U3 1) | 7 |
+| R1 PM | 1 (T4) | 8 (U1 5, U2 1, U3 1, U4 1) | 9 |
 | R2 Backend | 1 (T3) | 1 (U2) | 2 |
 | R6 DevOps | 2 (T1, T2) | 0 | 2 |
-| **Total** | **4** | **7** | **11 of 20** |
+| **Total** | **4** | **9** | **13 of 20** |
 
 Remaining task estimate: K-002 1 + K-003 2 + K-004 2 + K-005 2 + K-008 3 = 10,
-against 9 turns of budget left. K-006's 2 estimated turns are unrecorded and are
+against 7 turns of budget left. K-006's 2 estimated turns are unrecorded and are
 not counted here.
 
-M0 is therefore **one turn over budget on paper before the reserve is touched**,
-and three over if K-006 cost its estimate. Confidence: task turns are evidenced by
+M0 is therefore **three turns over budget on paper before the reserve is touched**,
+and five over if K-006 cost its estimate. Confidence: task turns are evidenced by
 PR records; the U rows are R1's count of working rounds and are ±1 each. The
-direction is not in doubt — unbudgeted work (7) is larger than budgeted task work
-(4) — and that is the finding, not the exact total.
+direction is not in doubt — unbudgeted work (9) is more than twice budgeted task
+work (4) — and that is the finding, not the exact total.
 
 **(b) Parity corpus against the 300-case gate**
 
@@ -122,7 +126,7 @@ No unverdicted merges to name.
 with turns charged to the milestone in which they occur and reported at each gate
 checkpoint. I am not adding it: it changes the M0 estimate, and the estimate is
 the sponsor's. Without it, every future governance round silently eats the fix
-reserve — which, on (a) above, is 7 turns of M0 spend the plan cannot currently
+reserve — which, on (a) above, is 9 turns of M0 spend the plan cannot currently
 name.
 
 ## 5. Merge records — DL-021 and DL-025
@@ -137,8 +141,9 @@ a non-authoring lane may issue it under the compensating control in DL-025.
 | #4 | R6 | R2 `REQUEST CHANGES` 09:12Z → `APPROVE` 09:20Z on `1578a0a` | Yes | Genuine repair cycle: both required changes are in the first verdict |
 | #2 | R2 | R6 `APPROVE` 09:51Z | Yes | Comment-only certification: diff changes comments and doc text, no executable logic |
 | #5 | R2 | R6 `REQUEST CHANGES` 09:52Z | Yes | Open — ADR-0002 needs another turn |
-| #1 | R2 | R1 PM (this turn) | Yes | n/a — docs-only, V-DOC |
-| #6 | R1 | pending R6 (reassigned at seq 123) | — | PM's read is posted as a comment without a verdict line, so it is a second pair of eyes and not the record |
+| #1 | R2 | R1 `REQUEST CHANGES` 09:58Z on `7bdad6a`; `APPROVE` 10:08Z on `7de616e` | Yes | n/a — docs-only, V-DOC; the repair was 11+/7- in two files, no executable logic |
+| #6 | R1 | R6 `APPROVE` 10:05Z on `da43f03` | Yes | n/a — the verdict is R6's own; PM's read is posted as a comment without a verdict line |
+| #8 | R6 | R1 `REQUEST CHANGES` → `APPROVE` on `e468b4f` | Yes | n/a — docs and CI job names, no workflow logic changed |
 
 The compensating control in DL-025 requires R1 to record it here. That is what
 the last column is for; when a verdict relies on it, the row says which clause
