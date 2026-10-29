@@ -10,10 +10,11 @@ contractors.
   `spike/<slug>` (spikes are never merged; they produce an ADR).
 - Conventional Commits: `feat(core): ...`, `fix(macos): ...`,
   `docs(plan): ...`. Scope is the crate or area, not the person.
-- Squash merge only. The PR title becomes the commit subject and must carry
-  the task ID.
+- Squash merge only, enforced in repository settings (merge commits and rebase
+  merges are disabled; the branch is deleted on merge). The PR title becomes
+  the commit subject and must carry the task ID.
 - No direct pushes to `main`, no force pushes, no self-merge on core or
-  platform adapters.
+  platform adapters. Enforced by branch protection (DL-024), not by convention.
 
 ## 2. Pull requests
 
@@ -34,6 +35,17 @@ different **role** therefore counts when it is a `COMMENTED` review that starts
 with `VERDICT: APPROVE` or `VERDICT: REQUEST CHANGES` and lists the commands
 run. The reviewer must be a different role from the author; self-approval in any
 form does not count. R1 records the merge approval in the turn ledger.
+
+Because of that constraint, branch protection requires the status checks but not
+a GitHub review approval (DL-024). The table above is still the rule: a merge
+without a recorded verdict from the named role is a process defect and is
+raised at the next gate checkpoint.
+
+`main` protection (DL-024): the nine required checks are `secrets`,
+`build-test` on Ubuntu, macOS and Windows, `licenses`, `parity`, `core-purity`,
+`no-network` and `sbom`; the branch must be up to date with `main` before
+merging; linear history is required; force pushes and branch deletion are
+refused; the rules apply to administrators too.
 
 Review SLA: first response within one turn. A PR with no review after two turns
 of its author's work is raised at the next gate checkpoint.
