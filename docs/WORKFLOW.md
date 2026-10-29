@@ -49,10 +49,15 @@ logic change in `openkey-core` still waits for a second engineering lane. R1
 records this as a compensating control until R3 and R7 are staffed.
 
 `main` protection (DL-024): the nine required checks are `secrets`,
-`build-test` on Ubuntu, macOS and Windows, `licenses`, `parity`, `core-purity`,
-`no-network` and `sbom`; the branch must be up to date with `main` before
-merging; linear history is required; force pushes and branch deletion are
-refused; the rules apply to administrators too.
+`build-test (ubuntu-24.04)`, `build-test (macos-15)`,
+`build-test (windows-2025)`, `licenses`, `parity`, `core-purity`, `no-network`
+and `sbom`; the branch must be up to date with `main` before merging; linear
+history is required; force pushes and branch deletion are refused; the rules
+apply to administrators too. **The runner version is part of a check's name.**
+Changing `runs-on: ubuntu-24.04` to `ubuntu-22.04` renames the check, and a
+renamed check is a missing check: protection waits for a name that no run will
+ever report, so every PR blocks and the reason is one yaml line away from the
+symptom. Update protection in the same action as the matrix.
 
 Review SLA: first response within one turn. A PR with no review after two turns
 of its author's work is raised at the next gate checkpoint.
@@ -117,6 +122,8 @@ recorded evidence does not count as spent against the milestone budget.
 - The corpus is the contract. A behaviour change without a corpus case is a bug.
 - Deliberate divergence from upstream requires sign-off from R2 and R11, a
   comment in the corpus line, and a changelog entry. Never "fix" a quirk silently.
+  DL-013 is `Decided` for the same rule and adds the fourth party: a fix also
+  needs sponsor approval, so R2 and R11 agreeing is necessary and not sufficient.
 - A parity regression blocks merge, not just release.
 - Coverage gate: `openkey-core` line coverage >= 85% at G1.
 
@@ -217,7 +224,7 @@ Recipes are referenced by ID in the `verify` column of `backlog.csv`:
 | V-CORE | V-BUILD + V-TEST + `cargo test -p openkey-core` with `#![forbid(unsafe_code)]` intact | no `unsafe`, no `cfg(target_os)` in core |
 | V-PARITY | `openkey-cli replay --corpus tests/corpus --diff ref-engine` | agreement >= target, every diff classified |
 | V-MAC | build + install on a clean macOS 13+ machine, type the 20-sentence script | script reproduces expected text; latency p99 within budget |
-| V-DOC | docs build/link check; every changed claim cites a task or decision | no dead links, no unsupported claim |
+| V-DOC | docs build/link check; every changed claim cites a task or decision; every grep used as evidence shown with its pattern (§13.1) | no dead links, no unsupported claim, no under-matching grep |
 | V-SEC | R12 review of permissions, data flows, and dependency licences | written sign-off with date |
 | V-REL | release checklist in Section 8, executed on a clean machine | every checklist item evidenced |
 | V-AI | evaluation set run, precision/acceptance reported, secure-field block tested | metrics meet the flag's target; block proven |
@@ -230,3 +237,40 @@ Rules:
   blocker, not a waiver. Escalate within one turn.
 - Two failed repair attempts on the same task stop the loop: escalate per
   Section 11 instead of spending a third turn on the same approach.
+
+### 13.1 Greps as evidence
+
+A grep offered as proof of absence must be shown with its pattern, and the
+pattern must be one whose failure mode is **over-matching, not under-matching**.
+`git grep -E '\bG[0-9]\b'` printing nothing is not evidence that no gate letters
+survive; it is evidence that that pattern matched nothing, and the two differ
+whenever the pattern is wrong. Under-matching greps pass silently, so a clean
+result from one is a false pass with a green output — the same defect as a
+comparator that exits 0 on zero cases.
+
+The rule, for V-DOC and every other recipe:
+
+1. Paste the pattern, not only the result. A result with no pattern cannot be
+   re-run by the reviewer.
+2. Prefer the pattern that also matches the text you expect to find. If you are
+   checking that `G1`–`G8` are gone, run `grep -n 'G[0-9]'` unscoped: it must
+   return the milestone-gate sentences you intend to keep, plus nothing else. An
+   empty result from an unscoped grep is itself suspicious.
+3. Scope the second pass to the file under review *and* the whole tree, and
+   report both. A file-scoped grep answers the file's question; the same symbol
+   can be stale two directories away, and the review will only ever see the
+   scope it was given.
+4. When the pattern is precise by necessity, prove the pattern can match: run it
+   once against a known-positive line.
+
+### 13.2 Parity gates (PG-01 – PG-03)
+
+Three gates the parity work depends on. They are named `PG` so they are not
+confused with tiers (`1`–`8`), milestone gates (`G0`–`G6`, `PLAN.md` §2) or
+decisions (`DL-nnn`).
+
+| ID | Gate | Passes when |
+| --- | --- | --- |
+| PG-01 | Pinned oracle and baseline | `docs/m0/ORACLE-PIN.json` records the oracle commit and the sha256 of every vendored engine file; every baseline directory is named for that commit; a mismatch fails CI (`scripts/ci/check-oracle-pin.py`) rather than producing a diff nobody reads. **Not yet complete as specified in `PORTING-MAP.md` §5:** the machine copy at `parity/oracle/pin.json` and the "fails if the two disagree" check were K-003 obligations and were not in #11, so today the pin file is single-sourced and `scripts/parity.sh` verifies it directly |
+| PG-02 | Parity evidence | A baseline is regenerated only by a reviewable commit whose diff *is* the behaviour change; agreement is measured on rendered document text after `HookState` (backspaces, reversed `charData`, restore re-synthesis), never on raw engine bits, whose low 16 bits hold an OS keycode |
+| PG-03 | Licence and source offer are inputs | The GPL-3.0 text, the NOTICE with upstream credit and the corresponding-source offer ship *with* the first artefact, not at 1.0. A Rust port is a derivative work, so these are structural and cannot be relaxed later |
