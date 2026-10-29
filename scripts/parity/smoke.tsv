@@ -1,0 +1,17 @@
+# K-003 smoke cases: one from each shape of the hook's contract, so a broken
+# driver fails here before any corpus baseline is generated from it.
+# id	method	options	input	expected
+telex-aa	telex	-	aa	â
+telex-dd	telex	-	dd	đ
+telex-aw	telex	-	aw	ă
+telex-vieejt	telex	-	vieejt	việt
+telex-restore	telex	-	ass	as
+telex-word-break	telex	-	aa\sa	â a
+# Delete is a pass-through: the engine answers vDoNothing (Engine.cpp, the
+# KEY_DELETE branch) and the *application* removes the character, so replaying
+# backspace over the single rendered glyph leaves an empty document.
+telex-delete-passthrough	telex	-	aa\b	-
+telex-caps	telex	-	Aa	Â
+telex-eng	telex	-	hello	hello
+vni-vieejt	vni	-	vie65t	việt
+simple-telex-1	simple_telex_1	-	aa	â

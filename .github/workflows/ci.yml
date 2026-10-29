@@ -157,9 +157,14 @@ jobs:
             ./scripts/parity.sh
             exit 0
           fi
-          fixtures="$(git ls-files | grep -Ei '(^|/)corpus/' | grep -v -E '(^|/)README\.md$' || true)"
+          # Every tracked `.tsv` is evidence the gate is owed, not just the ones
+          # under `tests/corpus/`: `scripts/parity/smoke.tsv` is the eleven cases
+          # the gate's blocking behaviour actually rests on, and a grep for a
+          # `corpus/` path component would let a lost executable bit on
+          # `scripts/parity.sh` fall through to the notice below.
+          fixtures="$(git ls-files '*.tsv')"
           if [ -n "$fixtures" ]; then
-            echo "::error::corpus fixtures exist but scripts/parity.sh does not (K-005): parity is unmeasured, not pending"
+            echo "::error::parity fixtures exist but scripts/parity.sh is missing or not executable (K-003 / K-005): parity is unmeasured, not pending"
             printf '%s\n' "$fixtures" | head -10
             exit 1
           fi
