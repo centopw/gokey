@@ -1,6 +1,6 @@
 name: nightly
 
-# G8 — WORKFLOW.md §3's nightly list: full corpus, differential fuzzing, benchmark
+# tier 8 — WORKFLOW.md §3's nightly list: full corpus, differential fuzzing, benchmark
 # regression against the previous `main`, dependency audit.
 #
 # Non-blocking by design. A nightly that blocks merges is a nightly people disable,

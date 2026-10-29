@@ -103,7 +103,7 @@ recorded evidence does not count as spent against the milestone budget.
 
 ## 8. Release and versioning
 
-Semantic versioning. `0.x` until G5, then `1.0.0`. Pre-releases: `0.x.y-alpha.N`,
+Semantic versioning. `0.x` until G3, then `1.0.0`. Pre-releases: `0.x.y-alpha.N`,
 `-beta.N`.
 
 Release checklist (all required for `1.x`):

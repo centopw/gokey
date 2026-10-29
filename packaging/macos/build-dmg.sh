@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Build an ad-hoc signed .app bundle and .dmg for the M0/M1 artefact channel (K-007, G5).
+# Build an ad-hoc signed .app bundle and .dmg for the M0/M1 artefact channel (K-007, ADR-0008 tier 5).
 #
 # This is a SPIKE BUNDLE, not the shipping product: the executable it wraps is the
 # headless `openkey` CLI. What it exercises is the part that always breaks late —
