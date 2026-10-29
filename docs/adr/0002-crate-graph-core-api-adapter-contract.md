@@ -1,6 +1,6 @@
 # ADR-0002 — Crate graph, core API and adapter contract
 
-- **Status**: proposed
+- **Status**: accepted (2026-10-29, `VERDICT: APPROVE` by R6 on this PR)
 - **Date**: 2026-10-29
 - **Author**: R2 (technical lead)
 - **Task**: K-002 (`backlog.csv`)
@@ -8,10 +8,10 @@
   DL-025 replaced the role-pinned cell, because R2/R3/R4 are one staffed lane and
   that lane is the author. The review recorded on this PR is R6 (DevOps
   Engineer), run against this head with its own commands.
-- **Ratifies** (on acceptance): `docs/ARCHITECTURE.md` sections 2–4, which have
+- **Ratifies**: `docs/ARCHITECTURE.md` sections 2–4, which have
   carried a "pending ADR-0002 sign-off" status line since bootstrap
-  (`ARCHITECTURE.md:3`). While this ADR is `proposed`, `ARCHITECTURE.md` says so
-  rather than "ratified" — the two files must not disagree at any commit.
+  (`ARCHITECTURE.md:3`). Accepted 2026-10-29, so `ARCHITECTURE.md` reads
+  "ratified" from the same commit; the two files must not disagree at any commit.
 - **Related decisions**: DL-002, DL-007, DL-008, DL-011, DL-013, DL-014, DL-018, DL-019, DL-021
 
 ## Context
@@ -63,7 +63,8 @@ Accept `ARCHITECTURE.md` section 2 as normative:
 
 Enforcement available today: `core-purity` (`scripts/ci/check-core-purity.py`,
 `.github/workflows/ci.yml`), added by the gate ladder in `c6c2777` and green on
-every PR and all three OSes since; `ec75ea7` is the `main` head this ADR is
+every PR since, on its single `ubuntu-24.04` runner — the three-OS coverage is
+`build-test`'s, not this job's; `ec75ea7` is the `main` head this ADR is
 written against. It asserts the graph three ways — core's declared
 `[dependencies]` carry no platform crate and no `openkey-ai`; the resolved normal
 closure (`cargo tree -p openkey-core --edges normal --prefix none --locked`)
@@ -325,3 +326,8 @@ pub struct Outcome {
 - 2026-10-29 — R6 review (D1 enforcement, D1 cli dependency, D2 module privacy,
   `Edit` `Copy`, acceptance cell) and R1 process review (ARCHITECTURE wording,
   acceptance cell, `ec75ea7` citation). Text only; D3–D10 unchanged.
+- 2026-10-29 — accepted on R6's `VERDICT: APPROVE` at `9573120` under DL-025 (R6
+  is not the authoring lane). This commit: `Status: accepted`; the D1 sentence
+  that called `core-purity` three-OS coverage corrected to its single
+  `ubuntu-24.04` runner (that coverage is `build-test`'s), as R6 required;
+  `ARCHITECTURE.md:3` back to "ratified", from `proposed`.

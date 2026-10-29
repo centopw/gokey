@@ -1,9 +1,8 @@
 # Architecture
 
-Status: sections 2–4 are governed by `adr/0002-crate-graph-core-api-adapter-contract.md`
-(K-002, `proposed` as of 2026-10-29) and become ratified when that ADR is
-accepted; until then the text below is the proposal it decides between, not a
-closed decision. The rest is a working proposal. Owner: technical lead (R2).
+Status: sections 2–4 are ratified by `adr/0002-crate-graph-core-api-adapter-contract.md`
+(K-002, accepted 2026-10-29; `VERDICT: APPROVE` by R6 under DL-025). Sections 1
+and 5 onwards remain a working proposal. Owner: technical lead (R2).
 
 ## 1. Goals
 
