@@ -3,9 +3,9 @@
 //! Mirrors upstream `extern int v*` globals (see `Engine.h`) but as an owned,
 //! serializable struct instead of process-global mutable state.
 //!
-//! The default profile is defined by the agreed GoKey defaults decision (C-013),
-//! not by upstream: the two differ deliberately, so the parity corpus carries an
-//! explicit option set per case instead of relying on either side's defaults.
+//! For 1.0 the default profile is the upstream macOS first-run profile, adopted
+//! unmodified (C-013). macOS and Windows disagree on some of these values; those
+//! differences are recorded with C-013 and deferred to M4.
 //!
 //! Persistence and migration from the legacy macOS plist / Windows registry
 //! belong to `openkey-platform`, not here (task C-013).
@@ -74,8 +74,8 @@ pub struct Options {
 
 impl Default for Options {
     fn default() -> Self {
-        // TODO(C-013): verify each default against upstream macOS/Windows apps,
-        // then record every deliberate divergence from them.
+        // TODO(C-013): verify each default against the upstream macOS first-run
+        // profile; five disagree with it today.
         Self {
             enabled: true,
             input_method: InputMethod::Telex,
