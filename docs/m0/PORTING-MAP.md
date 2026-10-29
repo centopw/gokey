@@ -9,6 +9,9 @@ Scope: analysis + design. **No Telex implementation** (per kickoff). No behaviou
 Platform decision (sponsor, 2026-10-29): **1.0 is macOS-only**; Windows and Linux follow at M4/M5,
 but every crate keeps compiling on all three OSes from M0. The oracle therefore stays the macOS
 engine build — which is what §6 R1/R2 already assumes.
+Defaults decision (PM, 2026-10-29, supersedes the earlier Q4 answer): **adopt the upstream macOS
+first-run profile unmodified**; Windows first-run/reset divergences are documented for M4. Audit and
+evidence in §3.1, migration matrix in §3.2.
 
 ---
 
@@ -107,59 +110,137 @@ a behaviour change.
 R-API-3 is the one I would not defer: it is cheap now and it changes the meaning of every adapter
 that will ever be written.
 
-### 3.1 Q4 defaults — acknowledged as a deviation by decision, not an omission
+### 3.1 Defaults — upstream macOS profile, adopted unmodified (supersedes the earlier Q4 answer)
 
-PM's Q4 decision (one GoKey-wide defaults set for fresh installs: `UseMacro=0`,
-`RestoreIfInvalidWord=0`, `SendKeyStepByStep=0`, `ShowUIOnStartup=0`, four input types on every OS)
-is **accepted and recorded here as a deliberate divergence from the upstream default profile**.
-Checked against the scaffold at `c64f8d6` (`options.rs:72-97`):
+PM's earlier Q4 answer (one GoKey-wide set with `UseMacro=0`) is **withdrawn**; the 2026-10-29
+decision is *adopt upstream macOS defaults unmodified, Windows divergences deferred to M4*. Accepted
+— and I verified the values against the pinned sources rather than taking the list on trust, because
+the list is only as good as its reading of upstream.
 
-| Agreed default | Scaffold now | Action | Parity consequence |
-|---|---|---|---|
-| `UseMacro=0` | `use_macro: true` | **must change** | Upstream macOS/Windows ship macros on; GoKey ships off. |
-| `RestoreIfInvalidWord=0` | `restore_if_invalid: true` | **must change** | Upstream restores raw keys on an invalid word; GoKey will not. Largest behaviour delta of the four. |
-| `SendKeyStepByStep=0` | `send_key_step_by_step: false` | matches | — |
-| `ShowUIOnStartup=0` | not in `Options` | none — UI/prefs-owned (`openkey-platform`) | Not a core concern; must not appear in `Options`. |
-| 4 input types per OS | `InputMethod` has exactly 4 | matches | — |
+**The globals block is not the first-run profile.** `AppDelegate.m:28-50` holds the C initialisers,
+but macOS writes a *different* set on first launch via `loadDefaultConfig` (`:288-315`), gated by
+`NonFirstTime` (`:177-179`). The two disagree for `vUseModernOrthography` (initialiser `1`,
+first-run write `0`) and `vUseMacroInEnglishMode` (initialiser `1`, write `0`). Reading the globals
+list gives the wrong answer for those two; `loadDefaultConfig` is the normative macOS first-run
+profile.
 
-The non-obvious consequence, and the reason this is recorded rather than just coded: **the corpus
-baseline must not be generated with oracle defaults.** `options.rs:34` says *"Defaults must match
-upstream defaults; the parity corpus is generated with these defaults"* — that sentence is now wrong
-for the two rows above. Every baseline case must carry the GoKey defaults **and** the harness must set
-the corresponding upstream `v*` flags to the same values before replaying, or the first diff will be
-attributable to configuration, not to the port. The corpus `options` column already allows this; the
-requirement is that it is never omitted. Two cases need explicit opt-in coverage (`use_macro=1`,
-`restore_if_invalid=1`) so the disabled features are still parity-tested.
+Audit of `Options::default()` (`options.rs:76-101`) against it:
 
-### 3.2 DM-04 — technical sign-off, and two caveats
+| Upstream | macOS first run | `Options` field | Scaffold | Verdict |
+|---|---|---|---|---|
+| `vLanguage` | 1 | `enabled` | `true` | ok |
+| `vInputType` | 0 = Telex | `input_method` | `Telex` | ok |
+| `vCodeTable` | 0 = Unicode | `charset` | `Unicode` | ok |
+| `vUseModernOrthography` | 0 | `modern_orthography` | `false` | ok |
+| `vQuickTelex` | 0 | `quick_telex` | `false` | ok |
+| `vCheckSpelling` | 1 | `check_spelling` | `true` | ok |
+| `vFreeMark` | 0 | `check_grammar` | `false` | value ok — **name wrong** (R-API-4) |
+| `vRestoreIfWrongSpelling` | 0 | `restore_if_invalid` | `true` | **mismatch** |
+| `vFixRecommendBrowser` | 1 | `fix_browser_recommend` | `true` | ok |
+| `vUseMacro` | 1 | `use_macro` | `true` | ok |
+| `vUseMacroInEnglishMode` | 0 | `use_macro_in_english` | `false` | ok |
+| `vAutoCapsMacro` | 0 (key never written) | `auto_caps_macro` | `true` | **mismatch** |
+| `vUseSmartSwitchKey` | 1 | `smart_switch_key` | `true` | ok |
+| `vUpperCaseFirstChar` | 0 | `upper_case_first_char` | `false` | ok |
+| `vTempOffSpelling` | 0 | `temp_off_spelling` | `true` | **mismatch** |
+| `vAllowConsonantZFWJ` | 0 | `allow_consonant_zfwj` | `false` | ok |
+| `vQuickStartConsonant` | 0 | `quick_start_consonant` | `false` | ok |
+| `vQuickEndConsonant` | 0 | `quick_end_consonant` | `false` | ok |
+| `vRememberCode` | 1 | `remember_code_per_app` | `false` | **mismatch** |
+| `vOtherLanguage` | 1 | `other_language` | `false` | **mismatch** |
+| `vTempOffOpenKey` | 0 | `temp_off_hotkey` | `false` | ok |
+| `vSendKeyStepByStep` | 0 | `send_key_step_by_step` | `false` | value ok — **wrong crate** (§3.3) |
+| — (UI-only) | — | *(absent)* | *(absent)* | correct: `ShowUIOnStartup` is an `NSUserDefaults` key read at `AppDelegate.m:168`, never an engine global |
 
-I sign the technical call: **`UseMacro=0` and four input types on every OS are both correct**, and
-neither harms corpus generation. Specifically:
+**Five defaults must change** for C-013 (`restore_if_invalid`, `auto_caps_macro`,
+`temp_off_spelling` → `false`; `remember_code_per_app`, `other_language` → `true`), plus the
+`check_grammar` → `free_mark` rename. Under the *old* Q4 profile two of those same five were
+"correct", which is why this table is the deliverable rather than a remembered list: the answer
+changed when the decision changed.
 
-- `UseMacro=0` removes no typing behaviour. Macros are a lookup on a break key; with the feature off,
-  every upstream macro branch simply cannot fire, so the Telex/VNI corpus is unaffected. What it does
-  mean is that **`Macro.cpp` has zero default coverage**, so a macro block must be written with
-  `use_macro=1` or the whole file (S6 in the porting map) merges unverified.
-- Four input types per OS is not a divergence at all from the engine's point of view: all four
-  (`Telex`, `VNI`, `SimpleTelex1`, `SimpleTelex2`) are engine-level `vInputType` values. It only
-  means every OS ships the same adapter-to-option mapping, which makes the corpus *portable* — one
-  case set, four methods, three platforms.
+One sentence in `options.rs:4-5` (*"Defaults must match upstream defaults; the parity corpus is
+generated with these defaults"*) becomes **true again** under this decision — provided the corpus
+harness sets the same upstream `v*` values. That is now a one-line rule instead of a per-case
+exception: **baseline cases run with macOS first-run defaults**, and any case that deviates must say
+so in its `options` column.
 
-Two caveats, both worth recording before the corpus is generated:
+### 3.2 C-013 — the migration matrix is four columns, not three
 
-1. **`SendKeyStepByStep` is not engine state, so it should not be in `Options`.** Upstream confirms
-   it is read only by the platform glue — `OpenKey.mm:558,771` and `OpenKey.cpp:443,627` — and never
-   by `Engine.cpp`. It does not change *what* the engine decides, only *how* the adapter emits the
-   same `Edit` (one string vs per-key). Corpus cases cannot observe it, which means a field for it in
-   `Options` is untestable by the parity gate and will drift. Put it in the adapter/host settings and
-   let `Edit` be the contract. (It is also platform-split upstream: Windows defaults it to **1**,
-   `AppDelegate.cpp:33`; macOS to **0**, `AppDelegate.m:42` — so "one value everywhere" is itself a
-   divergence from *both*.)
-2. **`RestoreIfInvalidWord=0` is the one that needs deliberate coverage.** Upstream restores the raw
-   keystrokes when a word turns out invalid; with the feature off, that entire branch
-   (`checkRestoreIfWrongSpelling`, `restore::from_raw_keys`) is dead by default. Off-by-default is
-   fine as a product decision, but the acceptance for C-013 should say so explicitly, or a whole
-   restore path will be reviewed as "ported" while never having executed.
+PM asked for macOS / Windows-first-run / Windows-reset. The evidence says **macOS reset is a fourth
+distinct state**, so I am proposing four columns. The mechanism matters more than the table:
+
+- **macOS reads** `VAR = [defaults integerForKey:@"KEY"]` (`OpenKey.mm:23`) — an absent key is **0**,
+  whatever the intended default was.
+- **Windows reads** `KEY = getRegInt("KEY", DEFAULT)` (`stdafx.h:56`) — an absent key takes the
+  *declared* default, not 0.
+- **Neither platform writes on every load.** macOS writes once, behind `NonFirstTime`
+  (`AppDelegate.m:177`); Windows writes only when the user hits "default"
+  (`AppDelegate.cpp:171`). So "absent", "stored 0" and "effective 0" are three different states, and
+  on Windows "first run" and "reset" are not the same profile.
+
+Settings where the four columns are not all equal (all verified at the pin):
+
+| Setting | macOS first run | macOS reset | Win first run | Win reset |
+|---|---|---|---|---|
+| `vUseMacro` | 1 | 1 | **1** (`OpenKey.cpp:85`) | **0** (`AppDelegate.cpp:183`) |
+| `vRestoreIfWrongSpelling` | **0** | 0 | **1** (`OpenKey.cpp:89`) | 1 |
+| `vSendKeyStepByStep` | **0** | 0 | **1** (`OpenKey.cpp:93`) | 1 |
+| `vSupportMetroApp` | n/a | n/a | **0** (`OpenKey.cpp:97`) | **1** (`AppDelegate.cpp:190`) |
+| `vAutoCapsMacro` | 0 (absent→0) | **unchanged** — not in `loadDefaultConfig` | 0 | 0 |
+| `vFreeMark` | 0 | 0 | 0 | 0 — but *neither* platform ever reads it back (§below) |
+
+Three findings that need to be in C-013's acceptance, not in a footnote:
+
+1. **macOS reset ≠ macOS first run.** `loadDefaultConfig` omits `vAutoCapsMacro`, so a reset keeps
+   whatever was persisted while a fresh install gets 0.
+2. **"Persisted ≠ effective" has a real instance.** On macOS reset, `AppDelegate.m:294` writes
+   `vCodeTable`'s value under the `SwitchKeyStatus` key (copy-paste bug), so the stored hotkey status
+   becomes 0; `AppDelegate.m:397-400` then repairs `0 → DEFAULT_SWITCH_STATUS` on load. Stored 0,
+   effective `0x7A000206`. Same class of bug at `:301`, which writes `vUseMacroInEnglishMode` into the
+   `SendKeyStepByStep` key.
+3. **`free_mark` persistence is dead on both platforms.** macOS assigns 0 with the read commented out
+   (`OpenKey.mm:91`); Windows assigns 0 with no read at all (`OpenKey.cpp:83`). If GoKey persists
+   `free_mark`, that is *new* behaviour, not a port — worth a line in the ADR so it is not later
+   "fixed" back.
+
+Also the upgrade case PM named: `vRememberCode` is new in 2.0, so a user upgrading from 1.x has no
+key. macOS reads 0, Windows reads the declared 1 — same user, two different effective defaults. That
+is what "absent ≠ stored 0" costs, and it is the reason C-013 needs a migration step rather than a
+`#[serde(default)]`.
+
+Under DL-003/DL-014 (1.0 macOS only) **C-013's acceptance is now satisfiable**: "defaults verified
+against both upstream apps" becomes macOS-verified-now, Windows-columns-recorded-and-deferred-to-M4,
+with the table above as the deferral's specification. What C-013 must ship: the five default fixes,
+the `free_mark` rename, a settings schema version, and an explicit decision (recorded, not implied) on
+whether GoKey reproduces upstream's persisted-value bugs or normalises them.
+
+### 3.3 DM-04 — technical sign-off, re-signed against the new position
+
+I sign the technical call: **upstream macOS defaults unmodified is the right profile for 1.0**, and
+four input types on every OS is not a divergence at all. Specifically:
+
+- `UseMacro=1` means `Macro.cpp` (S6) gets default corpus coverage instead of needing a dedicated
+  opt-in block — that caveat from my earlier note **inverts** under this decision. Macro *cases* are
+  still needed (the corpus will not generate them by accident), but the code path is no longer dead
+  by default.
+- Four input types per OS is not an engine divergence: all four (`Telex`, `VNI`, `SimpleTelex1`,
+  `SimpleTelex2`) are `vInputType` values. It only pins one adapter-to-option mapping per OS, which
+  makes the corpus portable.
+- `ShowUIOnStartup=0` is correct and is **not** an `Options` field: it is a UI preference read at
+  `AppDelegate.m:168`. Recording it as an omission would be wrong; it belongs to `openkey-platform`.
+
+Two caveats survive the reversal:
+
+1. **`SendKeyStepByStep` is not engine state, so it should not be in `Options`** — unchanged position.
+   Upstream confirms it is read only by the platform glue (`OpenKey.mm:558,771`, `OpenKey.cpp:443,627`)
+   and never by `Engine.cpp`; corpus cases cannot observe it, so a core field is untestable by the
+   parity gate and will drift. Put it in adapter/host settings and let `Edit` be the contract. Its
+   value is still correct in the scaffold (`false` = macOS default), just in the wrong crate.
+2. **`RestoreIfInvalidWord=0` still needs deliberate coverage.** It is the macOS default, so the
+   restore branch (`checkRestoreIfWrongSpelling`, `restore::from_raw_keys`, `Engine.cpp:1335,1395`)
+   is dead under default config. That is correct behaviour, but C-013's acceptance should name it, or
+   a whole restore path is reviewed as "ported" having never run. One block with
+   `restore_if_invalid=true` covers it.
 
 
 
@@ -438,9 +519,10 @@ Reported, not patched, because each belongs to a task ID:
    kickoff assigned me the reference harness and corpus baseline. **Resolved 2026-10-29:** PM
    confirmed R5 is unstaffed and proposed Backend takes R5 as interim. **Accepted**, with the risk
    stated in §7b.
-6. **Two `Options` defaults contradict the agreed GoKey defaults** (`use_macro: true`,
-   `restore_if_invalid: true`, `options.rs:82,87` vs Q4). Recorded in §3.1; the change belongs to
-   C-013 (defaults matrix), not to this docs-only delivery.
+6. **Five `Options` defaults contradict the upstream macOS first-run profile** (`restore_if_invalid`,
+   `auto_caps_macro`, `temp_off_spelling` should be `false`; `remember_code_per_app`,
+   `other_language` should be `true`). Full audit and evidence in §3.1; the change belongs to C-013,
+   not to this docs-only delivery.
 7. **`Options` is missing `show_ui_on_startup`** — correct as-is: it is a UI preference, not engine
    state (§3.1). Listing it here only so the absence reads as a decision.
 
@@ -477,11 +559,12 @@ Recommendation, as a plan change for the sponsor rather than something I can set
 
 ### 7b. R5 accepted as interim — the risk this creates, stated plainly
 
-With R5 folded into R3, one agent holds **K-002, K-003, K-004, K-005, K-008** plus C-001/C-002. The
-serialisation is real: K-003 (headless reference build) blocks K-004 (corpus v0 ≥300) which blocks
-K-005 (replay/diff), and C-001's word model is validated *by* K-005's diff. If I am the bottleneck,
-M0 exit criteria 2 and 3 slip together rather than independently — there is no longer a second person
-who can take one of the three while I take another.
+**Accepted, explicitly** (asked twice: PM seq=26 and seq=36). With R5 folded into R3, one agent holds
+**K-002, K-003, K-004, K-005, K-008** plus C-001/C-002. The serialisation is real: K-003 (headless
+reference build) blocks K-004 (corpus v0 ≥300) which blocks K-005 (replay/diff), and C-001's word
+model is validated *by* K-005's diff. If I am the bottleneck, M0 exit criteria 2 and 3 slip together
+rather than independently — there is no longer a second person who can take one of the three while I
+take another.
 
 Two mitigations I will apply, and one I need from PM:
 
@@ -492,6 +575,12 @@ Two mitigations I will apply, and one I need from PM:
 - **From PM:** name the hand-off condition now, not at M0 exit — e.g. *"if corpus v0 is not at 150
   cases by <date>, QA is staffed"*. An interim role with no expiry is a permanent role that nobody
   resourced.
+
+The macOS-only rescope makes this somewhat cheaper: K-003/K-004/K-005 lose their cross-platform
+obligation for 1.0 (backlog defects PM logged in seq=44 — REL-001 depends on `MAC-007` only, REL-003
+is macOS, K-007 is a macOS bundle). The **dependency shape is unchanged**, though: the oracle still
+has to exist before the corpus, and the corpus still has to exist before the word model can be called
+validated. The expiry condition is still the thing I need.
 
 ---
 
@@ -535,7 +624,7 @@ core's public surface and avoids a second renderer.
 | Q4 | Output text: precomposed NFC, no decomposition? | Backend proposal → PM records | Upstream emits precomposed code points; macOS may normalise downstream. Affects every baseline |
 | Q5 | Macro persistence: read OpenKey’s byte format, or a new one? | Backend + PM | Decides whether a legacy parser ships |
 | Q6 | ~~Will `docs/` be restored~~ **Answered:** absent from `c64f8d6`; K-009 cannot close. Corpus-format extension (§5.2) still needs an owner decision | Admin / R5 | The format extension is now mine by default (§7b) — flagging rather than assuming |
-| Q7 | Does the agreed Q4 defaults set apply to the **corpus baseline** too, i.e. is parity measured against upstream defaults or GoKey defaults? (§3.1) | PM to record | If unrecorded, the first parity diff is ambiguous between a port bug and a config difference |
+| Q7 | ~~Is parity measured against upstream defaults or GoKey defaults?~~ **Answered 2026-10-29:** GoKey adopts the upstream macOS first-run profile unmodified, so there is no difference to resolve. Baseline cases carry `use_macro=1` etc.; any deviating case states it in its `options` column (§3.1) | PM | Closed by decision |
 
 ---
 
