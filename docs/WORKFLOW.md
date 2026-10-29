@@ -41,6 +41,13 @@ a GitHub review approval (DL-024). The table above is still the rule: a merge
 without a recorded verdict from the named role is a process defect and is
 raised at the next gate checkpoint.
 
+Reviewer independence (DL-025): when the lane that authored a PR also holds the
+only eligible reviewer role, any other lane may review it, provided the reviewer
+runs the task's verification recipes itself and pastes the output, and, for
+`openkey-core`, certifies from the diff that no executable logic changed. A
+logic change in `openkey-core` still waits for a second engineering lane. R1
+records this as a compensating control until R3 and R7 are staffed.
+
 `main` protection (DL-024): the nine required checks are `secrets`,
 `build-test` on Ubuntu, macOS and Windows, `licenses`, `parity`, `core-purity`,
 `no-network` and `sbom`; the branch must be up to date with `main` before
