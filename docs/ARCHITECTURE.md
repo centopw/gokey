@@ -48,6 +48,17 @@ Rules:
 - `openkey-cli` links only core, so engine work can proceed without any OS
   integration and can run on Linux CI.
 
+Post-1.0 only, and never linked into the 1.0 binary:
+
+```
+  openkey-ai  ->  openkey-core (types) + openkey-platform (context/caret traits)
+                  suggestion providers, model runtime, evaluation harness
+```
+
+1.0 ships the *traits* in `openkey-platform`; it ships no AI implementation, no
+model, no network calls. The dependency direction is enforced in CI: core must
+never depend on `openkey-ai`.
+
 ## 3. Core contract
 
 ```rust
@@ -129,6 +140,8 @@ Platform differences are visible in the product, so they are data, not surprises
 | Key suppression | yes | yes | yes (IME scope) |
 | Focus/app identity | yes | yes | yes |
 | Read text near caret | yes (AX) | partial (UIA) | preedit only |
+| Caret geometry for overlay | yes (AX `kAXBoundsForRange`) | partial | no |
+| Secure-field detection | yes (AX secure text) | partial | n/a |
 | Per-key emission fallback | yes | yes | not needed |
 | System input-source switching | partial | partial | required |
 | Marked text / preedit | avoid (upstream bug) | not used | native mechanism |
@@ -184,7 +197,51 @@ keycode table was compiled in. The harness normalises both sides to logical keys
 | Key content | Never logged, never persisted; session buffer is in-memory only |
 | Panics | `catch_unwind` at the FFI/event boundary; engine must be panic-free |
 
-## 10. Open architecture decisions
+## 11. AI assist extension points (seams ship in 1.0, features post-1.0)
+
+AI is not in the keystroke path. The engine stays deterministic; assist features
+live in a separate crate that observes text and proposes edits.
+
+```rust
+// openkey-platform (shipped in 1.0, unused)
+pub struct CaretRect { pub x: f64, pub y: f64, pub height: f64 }
+
+pub struct TextContext {
+    pub before_caret: String,   // bounded, e.g. 512 chars
+    pub app: AppId,
+    pub secure: bool,
+}
+
+pub trait ContextProvider {
+    fn context(&self, max_chars: usize) -> Option<TextContext>;
+    fn caret_rect(&self) -> Option<CaretRect>;
+    fn is_secure_field(&self) -> bool;
+}
+
+// openkey-ai (post-1.0, never linked into the 1.0 binary)
+pub struct Suggestion { pub text: String, pub confidence: f32 }
+pub trait SuggestionEngine {
+    fn suggest(&self, ctx: &TextContext) -> Option<Suggestion>; // worker thread
+}
+```
+
+Rules:
+
+1. **Never block typing.** Suggestions run off the key path, are cancelled by
+   the next keystroke, and are dropped if older than 150 ms.
+2. **Accept is an ordinary edit.** Accepting sends backspaces plus text through
+   the same `emit` path, as a single undo unit; rejecting sends nothing.
+3. **Determinism boundary.** `openkey-core` has no AI types, no async runtime,
+   no network. CI fails if core depends on `openkey-ai`.
+4. **Privacy.** Context is read only after explicit opt-in; secure fields and
+   password managers return `None`; nothing is logged or persisted.
+5. **Graceful absence, not degradation.** If a platform cannot supply caret
+   geometry, assist features are hidden. This is a second reason macOS leads.
+6. **Rendering.** Ghost text is a non-activating overlay anchored to
+   `CaretRect`, not marked text — marked text reintroduces the underline
+   artefact (DL-017).
+
+## 12. Open architecture decisions
 
 - ADR-0004: macOS CGEventTap vs InputMethodKit (spike K-008).
 - ADR-0005: Windows hook v1 vs TSF (report WIN-007).

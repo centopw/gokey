@@ -11,6 +11,21 @@ consulted (DL-010).
 holds the plan, role roster, workflow, parity contracts and a compiling crate
 skeleton.
 
+## Roadmap
+
+| Phase | Scope | Status |
+| --- | --- | --- |
+| 1.0 | macOS only: full typing parity, menu bar, settings, signed and notarised dmg | Next |
+| Post-1.0 | Windows, then Linux, on the same unchanged core | Planned |
+| Later | AI assist: inline completion / ghost text, next-word prediction, rewrite design | Seams only in 1.0 |
+
+Cross-platform readiness is a hard constraint even though 1.0 ships on macOS:
+the engine stays OS-free, every adapter crate keeps compiling, and CI builds all
+three targets. AI features are post-1.0, but the extension seams (context
+provider, caret geometry, suggestion channel, accept/reject) ship inert in 1.0
+so the engine is never retrofitted. See DL-003, DL-014, DL-015 and
+`docs/ARCHITECTURE.md` Section 11.
+
 ## Why port it
 
 Upstream duplicates its engine across two platform apps, compiles platform
@@ -65,7 +80,7 @@ for the first green build.
 | `docs/WORKFLOW.md` | Branching, review, CI gates, cadence, release checklist, escalation |
 | `docs/RISKS.md` | Risk register with owners and triggers |
 | `docs/DECISIONS.md` | Decision log, open items blocking milestones |
-| `backlog.csv` | 53 tasks with owners, dependencies and acceptance criteria |
+| `backlog.csv` | 65 tasks with owners, dependencies and acceptance criteria |
 | `tests/corpus/README.md` | Parity corpus format and review rules |
 
 ## Licensing
@@ -79,5 +94,6 @@ Start M0: staff R1, R2, R3, R4, R5, R6 and the macOS spike (R7); the first three
 deliverables are the reference harness (K-003), corpus v0 (K-004), and the
 macOS adapter decision (K-008).
 
-Decisions needed from the sponsor: platform order (DL-003), public name
-(DL-010), and staffing commitment for `docs/TEAM.md` Section 1.
+Decisions confirmed: macOS-only 1.0 (DL-003, DL-014). Still open: public name
+(DL-010), AI feature order (DL-015), and staffing commitment for `docs/TEAM.md`
+Section 1.

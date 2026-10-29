@@ -14,17 +14,19 @@ maintains this roster and flags gaps.
 | R5 | QA / parity engineer | 1.0 | M0 | Test harness engineering, fuzzing, differential testing | Reference harness, corpus, compat matrices |
 | R6 | Build and release engineer | 0.75 | M0 | CI, cross-compilation, signing, notarisation, installers | Pipelines, artifacts, signing keys process |
 | R7 | macOS platform engineer | 1.0 | M0 (spike) | Objective-C/Swift + Rust FFI, CGEventTap or InputMethodKit | macOS adapter, menu bar, packaging |
-| R8 | Windows platform engineer | 1.0 | M2 | Win32, `windows-rs`, hooks, SendInput, MSI | Windows adapter, tray, installer |
-| R9 | Linux platform engineer | 1.0 | M3 | C ABI, IBus or Fcitx5, Wayland behaviour, distro packaging | Linux IBus engine, packaging |
-| R10 | Product/UI designer | 0.5 | M1 | Desktop utility UX, Vietnamese and English copy | Settings UI, tray/menu, onboarding, docs copy |
+| R8 | Windows platform engineer | 1.0 | M4 (post-1.0) | Win32, `windows-rs`, hooks, SendInput, MSI | Windows adapter, tray, installer |
+| R9 | Linux platform engineer | 1.0 | M5 (post-1.0) | C ABI, IBus or Fcitx5, Wayland behaviour, distro packaging | Linux IBus engine, packaging |
+| R10 | Product/UI designer | 0.5 | M1 | Desktop utility UX, Vietnamese and English copy | Settings UI, menu bar, onboarding, docs copy |
 | R11 | Vietnamese linguistics reviewer | 0.2 | M0 | Telex/VNI rules, orthography, spelling conventions | Corpus review, rule sign-off, edge-case adjudication |
 | R12 | Security and privacy reviewer | 0.1 | Gates | Threat modelling for input methods, permission UX | Permission model, telemetry stance, release sign-off |
 | R13 | OSS / community liaison | 0.2 | M0 | GPL compliance, upstream relations, community process | Naming, NOTICE, contribution guide, upstream contact |
+| R14 | AI/ML engineer | 1.0 | M6 (post-1.0) | Small on-device models, inference latency, evaluation | `openkey-ai`, suggestion quality, acceptance metrics |
 
 ## 2. Phase 0 kickoff roster (must start now)
 
 Five people plus two part-time advisors. This is the minimum to make G0 in two
-weeks.
+weeks. Windows, Linux and AI roles are deliberately not staffed yet — 1.0 is
+macOS only (DL-003/DL-014).
 
 | Code | Week-1 assignment | Deliverable by end of W2 |
 | --- | --- | --- |
@@ -98,3 +100,4 @@ R = responsible, A = accountable, C = consulted, I = informed.
 | Public name, license, upstream relations | Sponsor + R13 | R2, R12 |
 | Release go/no-go | R1 + R12 | R2, R5, R6 |
 | Adding a platform or a v2 feature | Sponsor | R1, R2 |
+| AI feature scope, data handling, model choice | Sponsor + R12 | R2, R14 |

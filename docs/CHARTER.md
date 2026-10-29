@@ -28,11 +28,12 @@ testable core.**
 | --- | --- | --- | --- |
 | O1 | Behavioural parity | Parity corpus (>=2000 cases) vs reference C++ build | >=99.5% agree; 100% of documented examples |
 | O2 | One core | Platform-specific code share | Core contains zero OS calls; adapters < 20% of LOC |
-| O3 | Cross-platform | Shipping platforms at 1.0 | macOS 13+, Windows 10/11, Ubuntu 24.04+/Fedora (GNOME + KDE) |
+| O3 | Cross-platform by design | 1.0 platforms / post-1.0 platforms | 1.0 ships macOS 13+ (arm64 + x86_64). Windows 10/11 and Linux (GNOME + KDE) follow on the same unchanged core |
 | O4 | Latency | Keystroke decision time, p99 | <=2 ms end-to-end, <=0.5 ms in core |
 | O5 | Stability | Crash-free sessions in beta | >=99.9% over 3 weeks |
 | O6 | Privacy | Typed content logged or persisted | Zero, by design and review |
 | O7 | Maintainability | New input method or charset | Implementable in one crate, behind tests |
+| O8 | AI-ready, not AI-shipping | Extension seams present in 1.0 | Context provider, caret geometry, suggestion channel and accept/reject events defined and compile-tested with no AI dependency in `openkey-core`; zero network surface in the 1.0 binary |
 
 ## 4. In scope for 1.0
 
@@ -44,13 +45,16 @@ testable core.**
 - Smart mode switching per application; per-app charset memory.
 - Auto uppercase first character of a sentence.
 - Convert tool (transcode text between charsets).
-- Settings UI, menu bar / tray control, global enable hotkey.
-- Packaging, code signing/notarisation, installers, vi/en user docs.
+- Settings UI, menu bar control, global enable hotkey.
+- Packaging, code signing/notarisation, signed dmg, vi/en user docs — **macOS only for 1.0**.
+- Architecture seams for future AI assist: text-context provider, caret geometry, suggestion channel, accept/reject events, `ai` settings section (all inert and off in 1.0).
 
 ## 5. Out of scope for 1.0
 
 - Mobile (iOS, Android), browser extension, web demo.
 - Cloud sync, accounts, user profiles.
+- Windows and Linux implementations in 1.0 — they are post-1.0 milestones (M4, M5) on the same core.
+- AI features in 1.0: inline completion, ghost typing, next-word prediction, rewrite. The seams ship, the features do not (M6).
 - Windows TSF-native implementation (v2 candidate, ADR-0005).
 - Fcitx5 addon (v2 candidate, ADR-0006).
 - Telemetry/analytics of any kind (privacy stance is a product feature).
@@ -68,6 +72,7 @@ testable core.**
 | Windows | Keyboard hooks raise antivirus false positives; distributables need Authenticode | Signing budget + AV submissions |
 | Linux | Wayland forbids global key capture; must be an input-method engine | IBus/Fcitx5 integration, not a hook |
 | Privacy | No network, no keystroke persistence | Rules out hosted spellcheck, crash auto-upload without opt-in |
+| AI later | Assist features need text context, which upstream never reads | Context reading is a separate trust boundary: opt-in only, on-device default, never in secure fields; the 1.0 core must not depend on it |
 | Keycodes | Upstream bakes platform keycodes into the engine | Adapters must normalise keys; parity harness must normalise too |
 
 ## 7. Stakeholders
@@ -87,7 +92,8 @@ testable core.**
 2. macOS is the first adapter, then Windows, then Linux (DL-003).
 3. Upstream author is reachable and cooperative about naming.
 4. A reference C++ build of the engine can be compiled and driven headlessly.
-5. No commercial deadline; 1.0 within ~28 weeks of kickoff is acceptable.
+5. No commercial deadline; macOS 1.0 within ~17 weeks of kickoff is acceptable
+   (all-platform parity, M4–M5, adds another ~14 weeks; AI features M6 come later).
 6. Settings migration from upstream is "best effort", not guaranteed lossless.
 
 ## 9. Governance

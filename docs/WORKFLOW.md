@@ -127,7 +127,6 @@ Release checklist (all required for `1.x`):
 - No use of the OpenKey name or icon in a published build until DL-010 is closed.
 
 ## 11. Escalation
-
 | Situation | Escalate to | Within |
 | --- | --- | --- |
 | Blocker older than 2 days | PM (R1) | Same day |
@@ -136,3 +135,22 @@ Release checklist (all required for `1.x`):
 | Parity exception or user-visible divergence | R2 + R11, then PM | Before merge |
 | Security or privacy concern | R12 | Immediately |
 | Licence or naming risk | R13 + sponsor | Before any public artifact |
+
+## 12. AI feature rules (post-1.0)
+
+- No AI feature work before G3 (macOS 1.0). Until then only the inert seams in
+  `ARCHITECTURE.md` are built.
+- Every AI feature ships behind its own flag, default off, with an opt-in that
+  states exactly what text is read and where inference runs.
+- No context text in logs, telemetry, crash payloads, or off-device requests
+  without separate explicit consent.
+- Secure fields, password managers and any field the OS marks secure are
+  hard-blocked at the `ContextProvider` layer.
+- Suggestions never block the keystroke path: worker thread, cancellation on the
+  next keystroke, enforced deadline (150 ms target).
+- Accepting a suggestion is a single undo unit and must not corrupt the engine's
+  word buffer; rejecting sends nothing.
+- Each feature needs an evaluation set and a measurable acceptance-rate target
+  before release.
+- Any new model or runtime dependency needs a GPL-3.0-compatible licence review
+  and a security review.

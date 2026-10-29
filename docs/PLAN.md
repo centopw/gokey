@@ -12,11 +12,12 @@ Dates are provisional until the sponsor signs off (DL-003).
 | Milestone | Weeks | Content | Exit criteria (gate) |
 | --- | --- | --- | --- |
 | **M0 Bootstrap** | W1–W2 | Repo, CI, reference harness, corpus v0, ADRs, adapter spikes, licensing | G0: builds on 3 OSes; ref harness replays a script; >=300 corpus cases; macOS adapter decision; LICENSE/NOTICE in repo; sponsor approves charter |
-| **M1 Core parity** | W3–W7 | Port Telex, VNI, Simple Telex, charsets, spelling/grammar, macros, smart switch, convert, options | G1: >=99.5% agreement on >=2000 cases, 100% documented examples; core p99 <= 0.5 ms; API frozen; zero `unsafe` in core |
-| **M2 macOS alpha** | W8–W12 | Event tap adapter, focus tracking, menu bar, settings, notarised dmg | G2: installs on a clean macOS 13+ machine; two weeks of daily dogfooding by the team; compat matrix documented |
-| **M3 Windows alpha** | W13–W17 | Hook capture, SendInput emission, tray + dialog, signed MSI | G3: signed installer; compat matrix (Office, browsers, IDEs, terminals); no AV false positive on VirusTotal reference set |
-| **M4 Linux alpha** | W18–W22 | IBus engine, preedit strategy, packaging, desktop matrix | G4: types Vietnamese in GTK and Qt apps on GNOME and KDE; deb + rpm install cleanly on Ubuntu 24.04 and Fedora |
-| **M5 Beta and 1.0** | W23–W28 | External beta, security review, docs, release | G5: release checklist in `WORKFLOW.md` complete; crash-free >=99.9% over 3 weeks; security sign-off |
+| **M1 Core parity** | W3–W7 | Port Telex, VNI, Simple Telex, charsets, spelling/grammar, macros, smart switch, convert, options; define AI seams | G1: >=99.5% agreement on >=2000 cases, 100% documented examples; core p99 <= 0.5 ms; API frozen; zero `unsafe` in core; context/suggestion traits compile with no AI dependency |
+| **M2 macOS alpha** | W8–W12 | Event tap adapter, focus tracking, menu bar, settings, notarised dmg | G2: installs on a clean macOS 13+ machine; two weeks of daily dogfooding; compat matrix documented |
+| **M3 macOS 1.0** | W13–W17 | Hardening, external beta, auto-update, docs, release | G3: 1.0.0 published for macOS; crash-free >=99.9% over 3 weeks; security sign-off; zero network calls outside the update check |
+| **M4 Windows** | W18–W22 | Hook capture, SendInput emission, tray + dialog, signed MSI | G4: signed installer; compat matrix (Office, browsers, IDEs, terminals); no AV false positive on the reference set |
+| **M5 Linux** | W23–W27 | IBus engine, preedit strategy, packaging, desktop matrix | G5: types Vietnamese in GTK and Qt apps on GNOME and KDE; deb + rpm install cleanly on Ubuntu 24.04 and Fedora |
+| **M6 AI assist** | Starts after G3, parallel with M4/M5 | Inline completion (ghost text), next-word prediction, evaluation, privacy gate | G6: opt-in completion with measured acceptance rate; privacy review passed; no core or keystroke-path dependency |
 
 ## 2. Critical path
 
@@ -25,13 +26,13 @@ K-003 ref harness -> K-004 corpus v0 -> K-005 replay CLI
         -> C-001 word model -> C-002 Telex -> C-006 spelling/restore
         -> C-014 corpus 2000 + fuzz -> G1
         -> (parallel) K-008 macOS spike -> MAC-001 capture -> MAC-002 emission
-        -> MAC-006 packaging -> G2 -> G3 -> G4 -> G5
+        -> MAC-006 packaging -> REL-006 1.0 -> G3
 ```
 
 Risk-retiring work that must not wait: the macOS adapter spike (K-008) starts in
 W1, in parallel with core work, because it decides the product's permission
 model. The reference harness (K-003) is on the critical path and is staffed from
-day one.
+day one. Windows, Linux and AI are deliberately off the 1.0 critical path.
 
 ## 3. Parallel workstreams
 
@@ -39,12 +40,13 @@ day one.
 | --- | --- | --- |
 | Core engine | M1 | R3, R4 |
 | Parity/QA harness | M0–M5 | R5 |
-| macOS | M0 spike, M2 | R7 |
-| Windows | M3 | R8 (joins M2) |
-| Linux | M4 | R9 (joins M3) |
+| macOS | M0 spike, M2–M3 | R7 |
+| Windows | M4 (post-1.0) | R8 (joins at M4) |
+| Linux | M5 (post-1.0) | R9 (joins at M5) |
+| AI assist | M6 (post-1.0) | R14 (joins at M6) |
 | Build/release/packaging | M0–M5 | R6 |
 | UX | M2–M3 | R10 |
-| Licensing/community | M0, M5 | R13 |
+| Licensing/community | M0, M3 | R13 |
 
 ## 4. Task tracking
 
@@ -56,8 +58,8 @@ day one.
 
 ## 5. Capacity and contingency
 
-- Kickoff team: ~5.9 FTE; peak in M3–M4: ~7.5 FTE.
-- Planned engineering effort in the backlog: roughly 240 person-days.
+- Kickoff team: ~5.9 FTE; 1.0 (macOS) peak ~6.5 FTE.
+- Post-1.0 phases add one platform engineer each; AI adds R14.
 - Milestone windows carry roughly 35% contingency for platform API surprises;
   that contingency is the primary schedule buffer. Do not spend it early.
 
@@ -76,5 +78,7 @@ A milestone without a demo is not complete.
 
 ## 7. Out of scope for this plan
 
-Windows TSF-native integration, Fcitx5 addon, mobile, sync, telemetry. Each has
-a v2 candidate ADR and must not enter a 1.0 milestone without a scope change.
+Windows and Linux implementations (M4, M5), AI features (M6), and the v2
+integration candidates (TSF, Fcitx5) are post-1.0. They must not enter M0–M3
+without a scope change; only the inert seams defined in `ARCHITECTURE.md` ship
+in 1.0.
