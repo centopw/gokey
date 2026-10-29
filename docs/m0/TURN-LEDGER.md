@@ -31,8 +31,9 @@ Recipe IDs are the ones in `WORKFLOW.md` §13.
 | T2 | R6 DevOps | K-001 + K-007 (est 2 + 2) | #4 merged `c6c2777` | V-BUILD, V-MAC (ad-hoc dmg) | Gate ladder + pinned toolchain + first dmg artefact. Time-to-artifact measured on five runs: 23 s (`af30fc5`), 17 s (`1578a0a`), 21 s (`c6c2777`), 18 s (`ec75ea7`), 21 s (`a59f7b6`). The 23→17 s change was the `REQUEST CHANGES` repair, not a timing fix; the spread after it is runner noise | 2 |
 | T3 | R2 Backend | K-002 (est 1) | #5 open, 2 commits | V-DOC | ADR-0002 drafted; R6 issued `VERDICT: REQUEST CHANGES` at 09:52:02Z. Turn spent, task not closed | 3 |
 | T4 | R1 PM | — *(governance register)* | #6 open, 4 commits | V-DOC | DL-023 (CI artefacts internal-only), DL-024 (enforced merge policy), DL-025 (reviewer independence); `RISKS.md` RK-01 dispositioned | 4 |
+| T5 | R1 PM | — *(this ledger)* | #9, one commit | V-DOC | Turn log opened with turns as spent, not as estimated; exposes §4 | 5 |
 
-Turns 1–4 are the whole of M0's evidenced spend. Everything else in M0 is either
+Turns 1–5 are the whole of M0's evidenced spend. Everything else in M0 is either
 delivered without a turn row (K-006, K-007's own budget) or not started (K-003,
 K-004, K-005, K-008).
 
@@ -72,22 +73,57 @@ Both are charged to M1's 51, not to M0's 20. This is the first draw on M1.
 
 | # | Work | Lane | Turns | Why it has no row |
 |---|---|---|---|---|
-| U1 | Governance register: DL-019…DL-025, `WORKFLOW.md` §1/§2/§6, `RISKS.md` RK-01, `TEAM.md` gate correction | R1 | 3 (seq 70 round, seq 113 round, #6) | No backlog row covers process governance |
-| U2 | Kickoff detours: repo access, `docs/` restore, `~/.gitignore_global` root cause | R1 + R2 | 2 | Same; the work is real, the plan has no line for it |
-| U3 | This ledger | R1 | 1 | Same — a process artefact cannot carry a task ID |
+| U1 | Governance register: DL-019…DL-025, `WORKFLOW.md` §1/§2/§6, `RISKS.md` RK-01, `TEAM.md` gate correction, ADR-0008 gate rename | R1 | 4 (seq 70, seq 113, #6, seq 132 review round) | No backlog row covers process governance |
+| U2 | Kickoff detours: repo access, `docs/` restore, `~/.gitignore_global` root cause | R1 + R2 | 2 (1 each) | Same; the work is real, the plan has no line for it |
+| U3 | This ledger | R1 | 1 | A process artefact cannot carry a task ID |
 
-That is **6 turns of M0 real work with no row against the 17.** The M0 budget of
-20 therefore has 3 turns of nominal reserve and 6 turns of unbudgeted work
-competing for it. Two of those six (U1) are the rounds that produced DL-019…025
-themselves, so they are not waste — but a budget that cannot name where a third
-of its spend went is not a budget.
+### 4.1 The three numbers the sponsor asked for
+
+**(a) Turns per lane, M0, against the budget of 20**
+
+| Lane | Task turns | Unbudgeted turns | Total |
+|---|---|---|---|
+| R1 PM | 1 (T4) | 6 (U1 4, U2 1, U3 1) | 7 |
+| R2 Backend | 1 (T3) | 1 (U2) | 2 |
+| R6 DevOps | 2 (T1, T2) | 0 | 2 |
+| **Total** | **4** | **7** | **11 of 20** |
+
+Remaining task estimate: K-002 1 + K-003 2 + K-004 2 + K-005 2 + K-008 3 = 10,
+against 9 turns of budget left. K-006's 2 estimated turns are unrecorded and are
+not counted here.
+
+M0 is therefore **one turn over budget on paper before the reserve is touched**,
+and three over if K-006 cost its estimate. Confidence: task turns are evidenced by
+PR records; the U rows are R1's count of working rounds and are ±1 each. The
+direction is not in doubt — unbudgeted work (7) is larger than budgeted task work
+(4) — and that is the finding, not the exact total.
+
+**(b) Parity corpus against the 300-case gate**
+
+`tests/corpus/` contains `README.md` and **zero** case files
+(`find tests/corpus -name '*.tsv' | wc -l` → `0`). The gate is `PLAN.md` §2 G0,
+">=300 corpus cases". K-004 owns it, has spent no turns, and its staffing cliff is
+"under 150 cases after three turns on K-004". Nothing is late yet, but the corpus
+is the long pole: K-003 → K-004 → K-005 → C-001 validation all queue behind it.
+
+**(c) PRs merged without a recorded verdict**
+
+**Zero of three.** Merged PRs are #2, #3, #4. Test applied: at least one review
+whose body begins `VERDICT: APPROVE`, per DL-021.
+
+- #3 — R10 `VERDICT: APPROVE` 08:56Z (an R2 approval at 08:52Z predates the DL-021 format but is on the PR)
+- #4 — R2 `VERDICT: REQUEST CHANGES` 09:12Z → `VERDICT: APPROVE` 09:20Z
+- #2 — R6 `VERDICT: APPROVE` 09:51Z under DL-025
+
+No unverdicted merges to name.
 
 **Proposal to the sponsor, not applied by me.** One backlog row,
 `K-010 Process governance and planning artefacts — R1, M0–M3, no fixed estimate`,
 with turns charged to the milestone in which they occur and reported at each gate
 checkpoint. I am not adding it: it changes the M0 estimate, and the estimate is
 the sponsor's. Without it, every future governance round silently eats the fix
-reserve.
+reserve — which, on (a) above, is 7 turns of M0 spend the plan cannot currently
+name.
 
 ## 5. Merge records — DL-021 and DL-025
 
