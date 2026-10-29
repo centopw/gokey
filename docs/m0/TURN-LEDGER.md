@@ -8,10 +8,11 @@ without a per-turn record, the budget is discovered by overrun.
 
 Rules this file enforces, all from existing decisions:
 
-- **One row per turn, priced by artefact.** A turn counts only with its artefact —
-  a branch or PR and the recipe output — per `WORKFLOW.md` §6 ("an unevidenced turn
-  does not count"). Two artefacts are countable without judgement: a merge (a task
-  turn, §1) and a review whose body begins `VERDICT:` (a review turn, §4 U9).
+- **One row per turn, priced by artefact.** A turn counts only with its artefact,
+  per `WORKFLOW.md` §6 ("an unevidenced turn does not count"): a merge that carries
+  a backlog row (a task turn, §1), a `DECISIONS.md` entry for a decision turn, or a
+  published `VERDICT:` review (a review turn, §4 U9). A merge with no backlog row
+  behind it is recorded with `—` and priced in §4.
 - **A `REQUEST CHANGES` then an `APPROVE` is two turns.** Two published verdicts,
   and the second follows work. One cycle is priced the same way on every lane and
   every PR; the first revision of this file priced the same cycle at 2 on one lane
@@ -132,8 +133,9 @@ counted here. If they cost their estimate, the totals become 40 and the projecti
 M0 is **eighteen turns over budget with a third of its task estimate still
 unspent**, and the projection is 43 of 20 before the fix reserve is considered — 45
 if K-006 cost its estimate. The first revision of this file put the same milestone
-at 24 turns. The fourteen-turn difference is U9's 22 review turns, less the six that
-U4, U6 and U8 already carried in part, less the one turn #6 was counted twice for.
+at 24 turns. The fourteen-turn difference is U9's 22 review turns, less the eight
+that U4, U6, U8 and U1 already carried (2 + 1 + 3 + 2), plus K-009's turn, which the
+first revision never counted, less the one turn #6 was counted twice for.
 **The plan priced delivery and never priced review.** Twenty-two of the 38 turns are
 a lane reading another lane's work. They were never free — DL-021 is what made them
 *recorded*, and a record can be counted. The tasks themselves were estimated at 17
