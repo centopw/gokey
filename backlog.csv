@@ -5,7 +5,7 @@ K-003,P0,M0,Parity,Headless reference build of the C++ engine with normalized ke
 K-004,P0,M0,Parity,"Parity corpus v0 from README, CHANGELOG and common Vietnamese words",R5,K-003,2,V-PARITY,At least 300 cases; reviewed by R11
 K-005,P0,M0,Parity,"Corpus loader, replay command and diff report in openkey-cli",R5,K-003;K-004,2,V-PARITY,One command reports pass/fail/diff per case
 K-006,P0,M0,Compliance,"LICENSE, NOTICE, GPL attribution, upstream contact",R13,-,2,V-LINT,NOTICE present; upstream author contacted; contact logged
-K-007,P0,M0,Bootstrap,"Packaging spike: unsigned app bundle, MSI and deb built in CI",R6,K-001,2,V-BUILD,Three artifacts produced; time-to-artifact documented
+K-007,P0,M0,Bootstrap,"Packaging spike: unsigned app bundle, MSI and deb built in CI",R6,K-001,2,V-BUILD;V-MAC,macOS app bundle and dmg produced in CI; time-to-artifact documented (MSI delegated to WIN-005 at M4; deb/rpm to LNX-004 at M5)
 K-008,P0,M0,macOS,"Spike: CGEventTap vs InputMethodKit, timebox three turns",R7,K-002,3,V-MAC,Prototype types into TextEdit; ADR-0004 recommendation
 K-009,P0,M0,Program,"Kickoff: confirm scope, staffing and platform order with sponsor",R1,-,1,V-DOC,Charter approved; DL-003 decided; roster committed
 AI-001,P1,M1,AI-Readiness,"Add ContextProvider, CaretRect and caret-anchored Suggestion types to openkey-platform (inert)",R2,C-001;C-017,1,V-AI,Traits compile on all targets; capability flags default false; no behaviour change
@@ -36,9 +36,9 @@ MAC-004,P2,M2,macOS,"Menu bar item, global enable hotkey, state indicator",R7,MA
 MAC-005,P2,M2,macOS,Settings window bound to core Options,R10,MAC-004,3,V-MAC,All options persist and apply live
 MAC-006,P2,M2,macOS,"Universal binary, codesign, notarisation, dmg",R6,MAC-002,3,V-MAC,Notarized dmg installs on a clean macOS 13+ machine
 MAC-007,P2,M2,Quality,Dogfood period and macOS compatibility matrix,R5,MAC-002,3,V-MAC,Two weeks dogfooded; matrix green or documented exceptions
-REL-001,P3,M3,Release,External beta program and triage process,R1,MAC-007;WIN-006;LNX-005,2,V-REL,At least 20 external testers; triage SLA defined
+REL-001,P3,M3,Release,External beta program and triage process,R1,MAC-007,2,V-REL,At least 20 external testers on macOS; triage SLA defined
 REL-002,P3,M3,Release,Opt-in crash reporting with no keystroke content,R12,MAC-006,3,V-SEC,Payload reviewed; privacy statement published
-REL-003,P3,M3,Release,Signed auto-update channel with rollback,R6,REL-002,4,V-REL,Update and rollback tested on all platforms
+REL-003,P3,M3,Release,Signed auto-update channel with rollback,R6,REL-002,4,V-REL,Update and rollback tested on macOS 13+; no network calls outside the signed update check
 REL-004,P3,M3,Release,Security and privacy review of permissions and data flows,R12,REL-002,2,V-SEC,Threat model signed off; no plaintext keystroke path
 REL-005,P3,M3,Release,User documentation in Vietnamese and English,R10,MAC-005,3,V-DOC,"Install, options and troubleshooting documented"
 REL-006,P3,M3,Release,macOS 1.0 release candidate and release notes,R1,REL-001;REL-003;REL-004;REL-005,2,V-REL,Release checklist complete; artifacts published
