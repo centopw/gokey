@@ -1,6 +1,6 @@
 # GoKey — M0 Backend: function→module porting map + Rust word model (C-001)
 
-Owner: Backend Engineer (R3, + R5 accepted as interim — see §7.5) · Created 2026-10-29
+Owner: Backend Engineer (R3, + R5 accepted as interim — see §7b) · Created 2026-10-29
 Status: **proposal for review — M0 exit criteria 4 and 5, plus PG-01**
 Behaviour oracle: `github.com/tuyenvm/OpenKey` @ `89c2fd3bf258562f2349f89b49d81e2f140c3fc3` → `ORACLE-PIN.json`
 Target repo: `github.com/centopw/gokey` @ `c64f8d6` (`openkey-rs` workspace)
@@ -126,6 +126,37 @@ the corresponding upstream `v*` flags to the same values before replaying, or th
 attributable to configuration, not to the port. The corpus `options` column already allows this; the
 requirement is that it is never omitted. Two cases need explicit opt-in coverage (`use_macro=1`,
 `restore_if_invalid=1`) so the disabled features are still parity-tested.
+
+### 3.2 DM-04 — technical sign-off, and two caveats
+
+I sign the technical call: **`UseMacro=0` and four input types on every OS are both correct**, and
+neither harms corpus generation. Specifically:
+
+- `UseMacro=0` removes no typing behaviour. Macros are a lookup on a break key; with the feature off,
+  every upstream macro branch simply cannot fire, so the Telex/VNI corpus is unaffected. What it does
+  mean is that **`Macro.cpp` has zero default coverage**, so a macro block must be written with
+  `use_macro=1` or the whole file (S6 in the porting map) merges unverified.
+- Four input types per OS is not a divergence at all from the engine's point of view: all four
+  (`Telex`, `VNI`, `SimpleTelex1`, `SimpleTelex2`) are engine-level `vInputType` values. It only
+  means every OS ships the same adapter-to-option mapping, which makes the corpus *portable* — one
+  case set, four methods, three platforms.
+
+Two caveats, both worth recording before the corpus is generated:
+
+1. **`SendKeyStepByStep` is not engine state, so it should not be in `Options`.** Upstream confirms
+   it is read only by the platform glue — `OpenKey.mm:558,771` and `OpenKey.cpp:443,627` — and never
+   by `Engine.cpp`. It does not change *what* the engine decides, only *how* the adapter emits the
+   same `Edit` (one string vs per-key). Corpus cases cannot observe it, which means a field for it in
+   `Options` is untestable by the parity gate and will drift. Put it in the adapter/host settings and
+   let `Edit` be the contract. (It is also platform-split upstream: Windows defaults it to **1**,
+   `AppDelegate.cpp:33`; macOS to **0**, `AppDelegate.m:42` — so "one value everywhere" is itself a
+   divergence from *both*.)
+2. **`RestoreIfInvalidWord=0` is the one that needs deliberate coverage.** Upstream restores the raw
+   keystrokes when a word turns out invalid; with the feature off, that entire branch
+   (`checkRestoreIfWrongSpelling`, `restore::from_raw_keys`) is dead by default. Off-by-default is
+   fine as a product decision, but the acceptance for C-013 should say so explicitly, or a whole
+   restore path will be reviewed as "ported" while never having executed.
+
 
 
 ---
@@ -402,14 +433,45 @@ Reported, not patched, because each belongs to a task ID:
 5. **`K-003/K-004/K-005` are assigned to R5** (QA/parity, per `tests/corpus/README.md`) while the
    kickoff assigned me the reference harness and corpus baseline. **Resolved 2026-10-29:** PM
    confirmed R5 is unstaffed and proposed Backend takes R5 as interim. **Accepted**, with the risk
-   stated in §7a.
+   stated in §7b.
 6. **Two `Options` defaults contradict the agreed GoKey defaults** (`use_macro: true`,
    `restore_if_invalid: true`, `options.rs:82,87` vs Q4). Recorded in §3.1; the change belongs to
    C-013 (defaults matrix), not to this docs-only delivery.
 7. **`Options` is missing `show_ui_on_startup`** — correct as-is: it is a UI preference, not engine
    state (§3.1). Listing it here only so the absence reads as a decision.
 
-### 7a. R5 accepted as interim — the risk this creates, stated plainly
+### 7a. C-007 "Grammar check" — verdict from `Engine.cpp` (asked by PM)
+
+**There is no grammar-check feature.** There is grammar *behaviour*, and it is unconditional.
+
+Evidence (all upstream, pinned commit):
+
+| Fact | Location |
+|---|---|
+| `void checkGrammar(const int& deltaBackSpace)` exists | `Engine.cpp:290` |
+| Called on every normal key: `checkGrammar(-1)` when nothing was processed, `checkGrammar(0)` otherwise | `Engine.cpp:1506`, `:1508` |
+| Called on backspace: `checkGrammar(1)` | `Engine.cpp:1463` |
+| The **only** gate is `if (!vFreeMark && !IS_KEY_D(data))` | `Engine.cpp:1504` |
+| `vFreeMark` has **no `vCheckGrammar` sibling anywhere** — one `extern int` and one default | `Engine.h:60`; `AppDelegate.m:30 = 0`, `AppDelegate.cpp:21 = 0` |
+| `vFreeMark` is exposed in the UI, i.e. it is a user setting | `ViewController.m:184`, `MainControlDialog` |
+
+So: **FE is right** — neither upstream app has a "grammar check" toggle, because the feature it would
+toggle is always on. **`backlog.csv` C-007 is unfounded as written** (a setting with acceptance
+"matches upstream on grammar corpus cases" — there is no setting to match). **PLAN.md M1 "spelling/
+grammar" is correct as behaviour**, and the scaffold's `Options::check_grammar` is the invented
+middle ground that produced the confusion (wrong name, inverted default: R-API-4).
+
+Recommendation, as a plan change for the sponsor rather than something I can settle alone:
+
+- Delete C-007 as a standalone feature, and move its acceptance sentence onto the engine-port task
+  (C-002): *grammar repositioning is part of the port, covered by corpus cases, ON unless
+  `free_mark` is set*.
+- The real option is `free_mark` (upstream `vFreeMark`). If the product wants it, it is one boolean
+  in `Options` with default `false`, and its corpus block is "marks stay where the user put them".
+- Do **not** keep a field called `check_grammar`: it cannot be mapped to any upstream control, so no
+  corpus case could ever be written against it.
+
+### 7b. R5 accepted as interim — the risk this creates, stated plainly
 
 With R5 folded into R3, one agent holds **K-002, K-003, K-004, K-005, K-008** plus C-001/C-002. The
 serialisation is real: K-003 (headless reference build) blocks K-004 (corpus v0 ≥300) which blocks
@@ -433,12 +495,12 @@ Two mitigations I will apply, and one I need from PM:
 
 | # | Question | Owner | Why it matters |
 |---|---|---|---|
-| Q1 | ~~Confirm R-id → person mapping~~ **Answered:** R5 unstaffed → Backend interim (§7a) | PM | Closed; only the hand-off condition is open |
+| Q1 | ~~Confirm R-id → person mapping~~ **Answered:** R5 unstaffed → Backend interim (§7b) | PM | Closed; only the hand-off condition is open |
 | Q2 | Adopt R-API-1..5 in ADR-0002 before C-001/C-005 code lands | PM (ADR-0002, K-002) | Core-API change rule; R-API-3 changes every adapter |
 | Q3 | macOS build at the pinned hash is normative where macOS and Windows disagree (R1, R2) | PM to record | Decides whether the pinned order/quirks are the spec |
 | Q4 | Output text: precomposed NFC, no decomposition? | Backend proposal → PM records | Upstream emits precomposed code points; macOS may normalise downstream. Affects every baseline |
 | Q5 | Macro persistence: read OpenKey’s byte format, or a new one? | Backend + PM | Decides whether a legacy parser ships |
-| Q6 | ~~Will `docs/` be restored~~ **Answered:** absent from `c64f8d6`; K-009 cannot close. Corpus-format extension (§5.2) still needs an owner decision | Admin / R5 | The format extension is now mine by default (§7a) — flagging rather than assuming |
+| Q6 | ~~Will `docs/` be restored~~ **Answered:** absent from `c64f8d6`; K-009 cannot close. Corpus-format extension (§5.2) still needs an owner decision | Admin / R5 | The format extension is now mine by default (§7b) — flagging rather than assuming |
 | Q7 | Does the agreed Q4 defaults set apply to the **corpus baseline** too, i.e. is parity measured against upstream defaults or GoKey defaults? (§3.1) | PM to record | If unrecorded, the first parity diff is ambiguous between a port bug and a config difference |
 
 ---
@@ -446,6 +508,6 @@ Two mitigations I will apply, and one I need from PM:
 ## 9. What I need, one line each
 
 - **PM**: gate on exit criteria 4 and 5; record R-API-1..5, Q2, Q3, Q4, Q7; set the R5 hand-off
-  condition (§7a); state the ADR-0002 decision so C-001 can start.
+  condition (§7b); state the ADR-0002 decision so C-001 can start.
 - **Admin/Hiep**: `docs/` in the repo — `TEAM.md` is what unblocks Q1.
 - **DevOps**: confirm the `macos-latest` job can build the headless C driver (`scripts/parity.sh` hook already exists in CI). If it cannot, DL-003’s revisit trigger fires.
