@@ -97,7 +97,12 @@ id <TAB> method <TAB> options <TAB> input [<TAB> expected]
 - `input`: typed characters, with `\b` backspace, `\n` enter, `\t` tab, `\s`
   space, `\\` backslash. Any other escape is an error.
 - `expected`: the final document, or `-` for an empty one (the same spelling the
-  harness uses for empty output). Four fields mean "replay only, do not judge".
+  harness uses for empty output). It uses the same escape table as `input`
+  (`\b \n \t \r \s \\`), decoded in a single pass, so a document that really
+  holds a backslash followed by `n` is written `\\n` and is not a newline.
+  Four fields mean "replay only"; the judge refuses that shape unless it is
+  asked for with `--allow-missing-expected`, because one dropped tab removes
+  the case from the gate and leaves the run green.
 
 The harness prints one line per key, then one summary line per case:
 
@@ -115,5 +120,11 @@ final string.
 Exit status: 0 replayed, 2 bad invocation or malformed script, 3 a case needs
 something the model refuses.
 
-`compare.py <script> <results>` judges a run against the `expected` column and
-exits 1 on disagreement, 2 if the two do not line up.
+`compare.py <script> <results>` judges a run against the `expected` column:
+0 every case agrees, 1 a case disagrees (the report names the case and the
+first differing code point), 2 it could not judge — the two files do not line
+up, a case lost its `expected` column, or nothing was compared at all. A script
+whose cases all skip is exit 2, not a green run: the judge is the gate's only
+verdict on the oracle, so "0/0 cases agree" must never be a pass.
+`scripts/parity.sh` propagates 2 as "could not judge" rather than folding it
+into disagreement.

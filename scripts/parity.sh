@@ -56,8 +56,20 @@ for script in "${scripts[@]}"; do
     [ -f "$script" ] || { echo "::error::missing script $script" >&2; exit 2; }
     out="$build/$(basename "${script%.tsv}").out"
     echo "== replay $script =="
-    "$build/harness" "$script" > "$out"
-    python3 scripts/parity/compare.py "$script" "$out" || status=1
+    if ! "$build/harness" "$script" > "$out"; then
+        echo "::error::the harness could not replay $script" >&2
+        exit 2
+    fi
+    # The comparator's 2 is "could not judge", not "judged and disagreed".
+    # Collapsing them costs the first person to debug a truncated run an hour
+    # spent looking for a wrong baseline that does not exist.
+    rc=0
+    python3 scripts/parity/compare.py "$script" "$out" || rc=$?
+    case "$rc" in
+        0) ;;
+        2) echo "::error::$script could not be judged (comparator exit 2)" >&2; exit 2 ;;
+        *) status=1 ;;
+    esac
 done
 
 if [ "$status" -ne 0 ]; then
