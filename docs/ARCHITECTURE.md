@@ -1,6 +1,8 @@
 # Architecture
 
-Status: proposal, pending ADR-0002 sign-off. Owner: technical lead (R2).
+Status: sections 2–4 are ratified by `adr/0002-crate-graph-core-api-adapter-contract.md`
+(K-002, proposed 2026-10-29); the rest is a working proposal. Owner: technical
+lead (R2).
 
 ## 1. Goals
 
@@ -74,10 +76,20 @@ impl Engine {
 
 pub struct Outcome {
     pub action: Action,          // Pass | Process | BreakWord | Restore | Macro | RestoreAndBreak
+    pub ext: Ext,                // Normal | Break | Delete | SuppressEmpty (upstream extCode)
     pub edit: Option<Edit>,      // backspaces + text, already charset-encoded
     pub passthrough: Option<KeyEvent>,
 }
+
+pub struct Edit {
+    pub backspaces: u8,          // upstream backspaceCount
+    pub text: Encoded,           // Utf16(Vec<u16>) | Bytes(Vec<u8>) — see ADR-0002
+    pub beep: bool,
+}
 ```
+
+The word model (`Word`/`Letter`), `Encoded`, `Ext` and the `Options` membership
+rule are fixed in `adr/0002-crate-graph-core-api-adapter-contract.md` (K-002).
 
 This is a deliberate change from upstream:
 
