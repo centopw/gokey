@@ -1,0 +1,39 @@
+# Options: one documented behaviour per row (README feature list).
+# id	method	options	input	expected
+opt-modern-hoa	telex	modern-orthography	hoaf	hoà
+opt-trad-hoa	telex	-	hoaf	hòa
+opt-modern-thuy	telex	modern-orthography	thuys	thuý
+opt-trad-thuy	telex	-	thuys	thúy
+opt-modern-khoe	telex	modern-orthography	khoer	khoẻ
+opt-trad-khoe	telex	-	khoer	khỏe
+opt-quick-cc	telex	quick-telex	cc	ch
+opt-quick-gg	telex	quick-telex	gg	gi
+opt-quick-kk	telex	quick-telex	kk	kh
+opt-quick-nn	telex	quick-telex	nn	ng
+opt-quick-qq	telex	quick-telex	qq	qu
+opt-quick-pp	telex	quick-telex	pp	ph
+opt-quick-tt	telex	quick-telex	tt	th
+opt-zfwj-z	telex	allow-zfwj	z	z
+opt-zfwj-f	telex	allow-zfwj	f	f
+# Quick consonants fire on a word-break key, not on the consonant: the lookup
+# runs from the isMacroBreakCode and KEY_SPACE branches (Engine.cpp:1333,
+# :1393) and returns false while _index <= 1 (Engine.cpp:1238), so `f` alone
+# can never become `ph`. The break key itself stays in the document.
+opt-start-f	telex	quick-start-consonant	fa\s	pha\s
+opt-start-j	telex	quick-start-consonant	ja\s	gia\s
+# `w` is rewritten to `ư` when inserted (Engine.cpp:1186, checkForStandaloneChar
+# -> KEY_U) before the break-time lookup reads TypingWord[0], so the documented
+# w->qu shortcut cannot match on this platform. Recorded as the engine behaves;
+# parity is bug-for-bug (DL-026), not aspirational.
+opt-start-w	telex	quick-start-consonant	wa\s	ưa\s
+opt-end-g	telex	quick-end-consonant	ag\s	ang\s
+opt-end-h	telex	quick-end-consonant	ah\s	anh\s
+opt-end-k	telex	quick-end-consonant	ak\s	ach\s
+opt-end-off	telex	-	ag\s	ag\s
+opt-start-caps	telex	quick-start-consonant	Fan\s	Phan\s
+# upper-case-first capitalises the first character after `. ` or a newline
+# (Engine.cpp:1376-1381 sets _upperCaseStatus, :1532 applies it at _index == 1).
+opt-upper-dot	telex	upper-case-first	.\svieejt	.\sViệt
+opt-upper-enter	telex	upper-case-first	\nvieejt	\nViệt
+opt-upper-off	telex	-	.\svieejt	.\sviệt
+opt-no-spelling	telex	no-spelling	vieejt	việt

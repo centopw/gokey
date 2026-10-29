@@ -1,0 +1,21 @@
+# Telex: the five tone keys and their removal.
+# id	method	options	input	expected
+telex-a-sac	telex	-	as	á
+telex-a-huyen	telex	-	af	à
+telex-a-hoi	telex	-	ar	ả
+telex-a-nga	telex	-	ax	ã
+telex-a-nang	telex	-	aj	ạ
+telex-e-sac	telex	-	es	é
+telex-o-huyen	telex	-	of	ò
+telex-circ-sac	telex	-	aas	ấ
+telex-circ-huyen	telex	-	aaf	ầ
+telex-breve-nang	telex	-	awj	ặ
+telex-e-circ-nang	telex	-	eej	ệ
+telex-o-circ-sac	telex	-	oos	ố
+telex-o-horn-sac	telex	-	ows	ớ
+telex-u-horn-sac	telex	-	uws	ứ
+telex-tone-then-mark	telex	-	asa	ấ
+telex-remove-tone	telex	-	asz	a
+telex-remove-tone-mark	telex	-	aasz	â
+telex-cap-sac	telex	-	As	Á
+telex-cap-circ-sac	telex	-	Aas	Ấ
