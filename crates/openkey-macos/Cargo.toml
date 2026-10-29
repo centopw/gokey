@@ -1,0 +1,12 @@
+[package]
+name = "openkey-macos"
+description = "macOS front-end (InputMethodKit / CGEventTap). Empty on non-macOS targets."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+openkey-core.workspace = true
+openkey-platform.workspace = true

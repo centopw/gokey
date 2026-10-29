@@ -1,0 +1,15 @@
+[package]
+name = "openkey-cli"
+description = "Headless harness: replay keystroke scripts and convert text between charsets"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "openkey"
+path = "src/main.rs"
+
+[dependencies]
+openkey-core.workspace = true

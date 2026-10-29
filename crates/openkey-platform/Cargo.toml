@@ -1,0 +1,11 @@
+[package]
+name = "openkey-platform"
+description = "Adapter contracts shared by the macOS, Windows and Linux front-ends"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+openkey-core.workspace = true

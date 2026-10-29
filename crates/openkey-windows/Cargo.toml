@@ -1,0 +1,12 @@
+[package]
+name = "openkey-windows"
+description = "Windows front-end (low-level keyboard hook + SendInput, TSF later). Empty on non-Windows targets."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+openkey-core.workspace = true
+openkey-platform.workspace = true

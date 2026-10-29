@@ -1,0 +1,12 @@
+[package]
+name = "openkey-linux"
+description = "Linux front-end (IBus engine, then Fcitx5 addon). Empty on non-Linux targets."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+openkey-core.workspace = true
+openkey-platform.workspace = true

@@ -1,0 +1,29 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/openkey-core",
+    "crates/openkey-platform",
+    "crates/openkey-cli",
+    "crates/openkey-macos",
+    "crates/openkey-windows",
+    "crates/openkey-linux",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "GPL-3.0-only"
+repository = "TBD"
+authors = ["OpenKey contributors", "Port of OpenKey by Mai Vu Tuyen (GPL-3.0)"]
+
+[workspace.dependencies]
+openkey-core = { path = "crates/openkey-core" }
+openkey-platform = { path = "crates/openkey-platform" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

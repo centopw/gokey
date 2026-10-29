@@ -1,0 +1,9 @@
+/target
+/dist
+.DS_Store
+*.dmg
+*.msi
+*.app
+*.deb
+*.rpm
+*.AppImage

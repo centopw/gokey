@@ -1,0 +1,83 @@
+# openkey-rs
+
+Rust port of [OpenKey](https://github.com/tuyenvm/OpenKey) — an open-source
+Vietnamese input method currently shipped as two separate native apps
+(Objective-C/AppKit on macOS, Win32 on Windows), with no working Linux build.
+
+Working name only. The public name is undecided until the upstream author is
+consulted (DL-010).
+
+**Status: M0 — bootstrap.** No typing logic is implemented yet. This repository
+holds the plan, role roster, workflow, parity contracts and a compiling crate
+skeleton.
+
+## Why port it
+
+Upstream duplicates its engine across two platform apps, compiles platform
+keycodes into the engine, keeps options in process globals, and has no automated
+tests. The port aims for one pure Rust core, thin native adapters, and a
+differential test harness that proves behaviour matches the C++ engine — plus a
+Linux build that upstream never finished.
+
+Full rationale and measures: `docs/CHARTER.md`.
+
+## Layout
+
+```
+crates/
+  openkey-core/      pure engine: keys, options, charsets, macros (no I/O, no unsafe)
+  openkey-platform/  Host and KeySource traits, AppId, capability model
+  openkey-cli/       headless harness: replay scripts, convert text
+  openkey-macos/     CGEventTap / InputMethodKit adapter + menu bar
+  openkey-windows/   WH_KEYBOARD_LL + SendInput adapter + tray (TSF in v2)
+  openkey-linux/     IBus engine (Fcitx5 in v2)
+tests/corpus/        golden parity cases shared with the C++ reference build
+docs/                charter, architecture, plan, team, workflow, risks, decisions
+backlog.csv          task backlog (IDs match the issue tracker)
+```
+
+Adapter crates are empty on other platforms, so the workspace builds everywhere.
+
+## Quickstart
+
+```sh
+rustup show                 # toolchain pinned by rust-toolchain.toml
+cargo check
+cargo test --workspace
+cargo run -p openkey-cli
+```
+
+CI (`.github/workflows/ci.yml`) runs the same commands on Ubuntu, macOS and
+Windows, plus `cargo deny` against the GPL-compatible license allowlist.
+
+Note: this scaffold has not been compiled locally on the machine that generated
+it (no Rust toolchain installed there). Task K-001 makes CI the source of truth
+for the first green build.
+
+## Documents
+
+| File | Purpose |
+| --- | --- |
+| `docs/CHARTER.md` | Objective, scope, constraints, stakeholders, success measures |
+| `docs/ARCHITECTURE.md` | Crate graph, core contract, platform mechanics, capability matrix |
+| `docs/PLAN.md` | Milestones M0–M5, gates, critical path, capacity |
+| `docs/TEAM.md` | Roles, kickoff roster, RACI, onboarding, decision rights |
+| `docs/WORKFLOW.md` | Branching, review, CI gates, cadence, release checklist, escalation |
+| `docs/RISKS.md` | Risk register with owners and triggers |
+| `docs/DECISIONS.md` | Decision log, open items blocking milestones |
+| `backlog.csv` | 53 tasks with owners, dependencies and acceptance criteria |
+| `tests/corpus/README.md` | Parity corpus format and review rules |
+
+## Licensing
+
+GPL-3.0, inherited from upstream. See `LICENSE` and `NOTICE.md`. Any distributed
+build must ship both and must make source available for that exact version.
+
+## Next action
+
+Start M0: staff R1, R2, R3, R4, R5, R6 and the macOS spike (R7); the first three
+deliverables are the reference harness (K-003), corpus v0 (K-004), and the
+macOS adapter decision (K-008).
+
+Decisions needed from the sponsor: platform order (DL-003), public name
+(DL-010), and staffing commitment for `docs/TEAM.md` Section 1.
