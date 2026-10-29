@@ -39,7 +39,7 @@ actual turns spent.
 Calendar dates are derived for humans when asked; they are never tracked. If a
 date and a gate disagree, the gate wins.
 
-## 2. Critical path
+## 3. Critical path
 
 ```
 K-003 ref harness -> K-004 corpus v0 -> K-005 replay CLI
@@ -54,7 +54,7 @@ spike (K-008) runs in parallel with core work because it decides the product's
 permission model, and the reference harness (K-003) is on the critical path from
 day one. Windows, Linux and AI stay off the 1.0 critical path.
 
-## 3. Parallel workstreams
+## 4. Parallel workstreams
 
 | Stream | Milestones | Owner |
 | --- | --- | --- |
@@ -68,7 +68,7 @@ day one. Windows, Linux and AI stay off the 1.0 critical path.
 | UX | M2–M3 | R10 |
 | Licensing/community | M0, M3 | R13 |
 
-## 4. Task tracking
+## 5. Task tracking
 
 - Backlog lives in `backlog.csv` and mirrors the issue tracker (GitHub Projects).
 - ID scheme: `K-*` bootstrap, `C-*` core, `MAC-*`, `WIN-*`, `LNX-*`, `REL-*`,
@@ -79,7 +79,7 @@ day one. Windows, Linux and AI stay off the 1.0 critical path.
   recorded per task, and the delta is reviewed at each gate.
 - Anyone may add tasks; only the PM re-sequences a milestone.
 
-## 5. Capacity and rework
+## 6. Capacity and rework
 
 - The working group is five Wakers: R1 program manager (Project Administrator),
   plus PM, backend, front-end and DevOps lanes; macOS platform work (R7) shares
@@ -93,7 +93,7 @@ day one. Windows, Linux and AI stay off the 1.0 critical path.
   owners hand over. An interim role without a cliff is a permanent role nobody
   resourced.
 
-## 6. Definition of a milestone demo
+## 7. Definition of a milestone demo
 
 Every milestone ends with a scripted demo on a clean machine:
 
@@ -106,7 +106,7 @@ Every milestone ends with a scripted demo on a clean machine:
 
 A milestone without a demo is not complete.
 
-## 7. Out of scope for this plan
+## 8. Out of scope for this plan
 
 Windows and Linux implementations (M4, M5), AI features (M6), and the v2
 integration candidates (TSF, Fcitx5) are post-1.0. They must not enter M0–M3
