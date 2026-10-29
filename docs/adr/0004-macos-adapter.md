@@ -5,7 +5,7 @@
 - Date: 2026-10-29
 - Owner: R7 (macOS platform engineer; staffed interim by the R10 lane)
 - Reviewers: R2 (technical lead)
-- Supersedes: nothing. Answers K-008. Superseded by nothing.
+- Supersedes: nothing. Answers K-008.
 - Backlog: K-008 (spike), MAC-002 (adapter), DL-004, DL-013, DL-017
 
 ## Context
@@ -63,11 +63,13 @@ counterpart instead of a platform-specific shell that must be re-derived.
 ### 3. The emit path
 
 Inside the callback we emit through the tap **proxy**, as upstream does
-(`CGEventTapPostEvent(_proxy, event)`), because that delivers downstream of our own tap. The spike
-used `CGEventPost(kCGSessionEventTap, …)` and therefore needed the guard in §5; both are correct for
-the spike, but the proxy form is the parity form and the adapter takes it. `CGEventPost` at the HID
-location remains only where an event must enter at the top — the self-test, and nothing in
-production.
+(`CGEventTapPostEvent(_proxy, event)`), because that delivers downstream of our own tap and is
+therefore immune to re-entry by construction. The spike used `CGEventPost(kCGSessionEventTap, …)` and
+stamped every emission anyway: with a HID-level tap that pair happens not to re-enter, but with
+`--session` the tap and the post share a level, and a HID-level post re-enters directly. The guard in
+§5 has to hold for every posting location, so it was written before the trusted run rather than after
+a loop was observed. `CGEventPost` at the HID location remains only where an event must enter at the
+top — the self-test, and nothing in production.
 
 Characters are written as UTF-16 with `CGEventKeyboardSetUnicodeString` on a keycode-`0` event, not
 as keycode-plus-modifier combinations. That is layout-independent: a US layout still produces `ữ`,
@@ -194,7 +196,7 @@ Expected, on a machine where step 2 took effect:
 
 ```
 AXIsProcessTrusted() = true  (Accessibility)
-IOHIDCheckAccess(post)   = 0 granted          # or 1 if posting needs its own grant
+IOHIDCheckAccess(post)   = 0 granted           # Accessibility covers posting; 1 here means the grant did not take
 CGEventTapCreate -> 0x…                        # a live mach port pointer
 swallowed=3 emitted=3
 RESULT=swallow-and-reemit-ok
