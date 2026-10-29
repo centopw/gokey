@@ -1,11 +1,14 @@
 //! User-facing settings.
 //!
 //! Mirrors upstream `extern int v*` globals (see `Engine.h`) but as an owned,
-//! serializable struct instead of process-global mutable state. Defaults must
-//! match upstream defaults; the parity corpus is generated with these defaults.
+//! serializable struct instead of process-global mutable state.
+//!
+//! The default profile is defined by the agreed GoKey defaults decision (C-013),
+//! not by upstream: the two differ deliberately, so the parity corpus carries an
+//! explicit option set per case instead of relying on either side's defaults.
 //!
 //! Persistence and migration from the legacy macOS plist / Windows registry
-//! belong to `openkey-platform`, not here (task C-014).
+//! belong to `openkey-platform`, not here (task C-013).
 
 use serde::{Deserialize, Serialize};
 
@@ -71,7 +74,8 @@ pub struct Options {
 
 impl Default for Options {
     fn default() -> Self {
-        // TODO(C-014): verify each default against upstream macOS/Windows apps.
+        // TODO(C-013): verify each default against upstream macOS/Windows apps,
+        // then record every deliberate divergence from them.
         Self {
             enabled: true,
             input_method: InputMethod::Telex,
