@@ -1,5 +1,12 @@
 /target
 /dist
+
+# This developer machine's ~/.gitignore_global excludes docs/, CLAUDE.md and
+# AGENTS.md. Re-include the project docs so every clone and CI job sees them.
+!docs/
+!docs/**
+!AGENTS.md
+
 .DS_Store
 *.dmg
 *.msi
