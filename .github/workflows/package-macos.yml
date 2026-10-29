@@ -39,7 +39,7 @@ jobs:
     name: dmg (ad-hoc, internal)
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable channel
         with:
           toolchain: ${{ env.RUST_VERSION }}
@@ -79,7 +79,7 @@ jobs:
             "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/archive/$GITHUB_SHA.tar.gz"
           ( cd dist && shasum -a 256 ./*.dmg source.tar.gz time-to-artifact.txt > SHA256SUMS && cat SHA256SUMS )
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: gokey-macos-dmg-${{ github.sha }}
           path: dist/

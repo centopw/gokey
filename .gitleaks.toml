@@ -1,0 +1,22 @@
+# gitleaks configuration — extends the default rules, removes known false positives.
+#
+# Extending rather than replacing: the default ruleset is the point of the job. The
+# only additions here are allowlists for files whose *content* is digests, because a
+# 64-character hex string keyed by a filename trips the generic-api-key heuristic
+# and the finding is a SHA-256 of a source file.
+title = "gokey"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Checksum and hash manifests (digests of sources, not credentials)"
+paths = [
+  '''docs/m0/ORACLE-PIN\.json''',
+  '''(?i)(^|/)SHA256SUMS$''',
+  '''(?i)\.sha256$''',
+]
+regexes = [
+  # "SomeFile.cpp": "322218b6...a794d3" — a pinned source hash, not a key.
+  '''"[^"]+\.(cpp|h|hpp|mm|m|rs)":\s*"[0-9a-f]{64}"''',
+]
