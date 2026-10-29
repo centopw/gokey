@@ -1,0 +1,67 @@
+c_symbol	file:line	responsibility	rust_target	parity_note	slice
+vKeyHandleEvent	engine/Engine.cpp:1314	per-key entry; break/space/delete/normal/engine-off split	openkey-core::engine::Engine::apply	preserve branch order; all side effects observable	S4
+vKeyInit	engine/Engine.cpp:135	reset indices, return &HookState	openkey-core::engine::Engine::new / reset	global pointer becomes returned value	S4
+startNewSession	engine/Engine.cpp:457	clear word, counts, macro+quick flags, long-word buffer	openkey-core::engine::Engine::start_new_word	also called by platform glue on focus/app change	S4
+vEnglishMode	engine/Engine.cpp:1284	track macro key buffer in English mode	openkey-core::engine::english_mode (new)	feeds macros only	S6
+vTempOffSpellChecking	engine/Engine.cpp:1223	toggle effective spelling at runtime	openkey-core::engine::Engine::toggle_temp_spelling	split setting from runtime toggle	S4
+vSetCheckSpelling	engine/Engine.cpp:1229	remember spelling setting	openkey-core::engine::Runtime::spelling_before	rename to a field	S4
+vTempOffEngine	engine/Engine.cpp:1233	temporarily disable engine	openkey-core::engine::Engine::set_engine_off	engine-off branch returns early (1467)	S4
+isWordBreak	engine/Engine.cpp:145	mouse or break-key test	openkey-core::keys::is_word_break (new)	platform-conditional tail disappears into Key enum	S1
+isMacroBreakCode	engine/Engine.cpp:156	macro-triggering break test	openkey-core::keys::is_macro_break (new)	subset of word breaks	S6
+_charKeyCode	engine/Engine.cpp:15	printable-char key set	openkey-core::keys::is_char_key (new)	linear std::find in 3 call sites (443, 1304, 1344)	S1
+_breakCode	engine/Engine.cpp:21	word-break key set	openkey-core::keys::WORD_BREAK (new)	win32 tail (VK_INSERT..VK_SCROLL) folded into Key enum	S1
+_macroBreakCode	engine/Engine.cpp:30	macro-break key set	openkey-core::keys::MACRO_BREAK (new)		S6
+ProcessingChar[4][11] + IS_KEY_* macros	engine/Engine.cpp:34-55	per-input-method key roles	openkey-core::keys::role (new)	10 macros embedding vInputType become one lookup; VNI repeats KEY_6 at idx5/6 intentionally	S1
+IS_SPECIALKEY	engine/DataType.h:133	special-key predicate per input method	openkey-core::keys::is_special (new)	4-way nested ternary becomes data	S1
+IS_CONSONANT	engine/DataType.h:130	consonant test (A E U Y I O are vowels)	openkey-core::keys::is_vowel (new)	name kept honest: Y counts as vowel	S1
+IS_MARK_KEY	engine/DataType.h:53	mark-key predicate per input method	openkey-core::keys::is_mark_key (new)	gated by IS_KEY_S/F/R/X/J for non-VNI	S1
+IS_QUICK_TELEX_KEY	engine/DataType.h:151	quick-telex trigger test	openkey-core::keys::is_quick_telex (new)	reads globals _index/TypingWord; becomes pure fn	S1
+platforms/mac.h	engine/platforms/mac.h:1	OS keycodes (oracle platform)	openkey-macos::keymap::from_native (new)	KEY_A=0 — oracle numbering	S1
+platforms/win32.h	engine/platforms/win32.h:1	OS keycodes	openkey-windows::keymap::from_native (new)	DO NOT transcribe: BACKQUOTE/BACK_SLASH/QUOTE are crossed (DEV-01)	S1
+platforms/linux.h	engine/platforms/linux.h:1	OS keycodes (X11 keycodes, not evdev)	openkey-linux::keymap::from_native (new)	values are X11 keycode space (evdev+8)	S1
+TypingWord/_index/_longWordHelper	engine/Engine.cpp:83-85	word storage + overflow	openkey-core::word::Word (new)	front-drop on overflow, right-shift on delete — not a tail push	S1
+setKeyData	engine/Engine.cpp:165	bounds-checked write	openkey-core::word::Word::set (new)	bounds behaviour is observable	S1
+findAndCalculateVowel	engine/Engine.cpp:560	VSI/VEI/vowelCount with qu/gi cases	openkey-core::word::Word::span (new)	qu-correction (581-584); forGrammar changes the scan → enum	S1
+getCharacterCode	engine/Engine.cpp:501	render word entry to output code	openkey-core::charset::render	unknown key returns input unchanged (silent passthrough)	S5
+checkSpelling	engine/Engine.cpp:176	full validity check → tempDisableKey	openkey-core::spelling::check (new)	loop vars reused across stages; transcribe before trusting	S2
+checkCorrectVowel	engine/Engine.cpp:468	suffix-match charset row + C/T mark limit + qu guard	openkey-core::phonotactics::tail_matches (new)	isCorect/k out-params become return values	S2
+canHasEndConsonant	engine/Engine.cpp:612	can the vowel combo take a final consonant	openkey-core::phonotactics::can_take_end_consonant (new)		S2
+checkGrammar	engine/Engine.cpp:290	re-place mark / fix ươ after edit or delete	openkey-core::grammar::reposition (new)	runs on the backspace path too	S3
+insertKey	engine/Engine.cpp:349	append key, optional spelling check, allow-d hack	openkey-core::word::Word::push_raw_key (new) + spelling::check	side effect tempDisableKey=false for d-after-consonant (365)	S1
+insertState	engine/Engine.cpp:369	push raw keystroke	openkey-core::history::KeyHistory::push (new)	must stay in step with TypingWord	S4
+KeyStates/_stateIndex	engine/Engine.cpp:92	raw keystroke history	openkey-core::history::KeyHistory (new)	needed for wrong-spelling restore	S4
+_typingStates/saveWord/saveWord(k,c)/saveSpecialChar	engine/Engine.cpp:86,381-433	word history across breaks	openkey-core::history::WordLog (new)	long words split into 32-char chunks (385-396)	S4
+restoreLastTypingState	engine/Engine.cpp:435	restore word after deleting into a break	openkey-core::history::WordLog::pop_restore (new)	spaces / special-char run / normal word — three shapes	S4
+_spaceCount/_specialChar	engine/Engine.cpp:113,117	space runs and punctuation runs	openkey-core::history::{space_run, special_run} (new)		S4
+checkRestoreIfWrongSpelling	engine/Engine.cpp:1204	restore raw keystrokes on invalid word	openkey-core::restore::from_raw_keys (new)	requires exact KeyHistory	S4
+removeMark	engine/Engine.cpp:587	z removes marks	openkey-core::ops::remove_marks (new)		S3
+insertMark	engine/Engine.cpp:753	add/remove mark, build patch	openkey-core::ops::apply_mark (new)	duplicate same mark ⇒ remove (779-789) is user-visible	S3
+handleModernMark	engine/Engine.cpp:629	modern tone placement	openkey-core::tone::placement_modern (new)	dense magic indices; own corpus block	S3
+handleOldMark	engine/Engine.cpp:727	old tone placement	openkey-core::tone::placement_old (new)		S3
+insertD	engine/Engine.cpp:808	toggle đ	openkey-core::ops::toggle_d_stroke (new)		S3
+insertAOE	engine/Engine.cpp:833	toggle ^ (â ê ô)	openkey-core::ops::toggle_circumflex (new)	data!=KEY_O break case (853)	S3
+insertW	engine/Engine.cpp:871	toggle w modifier (ă ơ ư)	openkey-core::ops::toggle_w_modifier (new)	most intricate function (871-984); expect most iterations	S3
+reverseLastStandaloneChar	engine/Engine.cpp:986	turn last key into standalone letter	openkey-core::ops::standalone_reverse (new)		S3
+checkForStandaloneChar	engine/Engine.cpp:995	w→ư, [→ơ, ]→ư with per-length tables	openkey-core::ops::standalone_key (new)	uses _standaloneWbad / _doubleWAllowed by word length	S3
+upperCaseFirstCharacter	engine/Engine.cpp:1042	auto-capitalise after . / Enter	openkey-core::ops::uppercase_first (new)	also rewrites macro key buffer	S3
+handleMainKey	engine/Engine.cpp:1055	dispatcher: z / [ / ] / d / mark / vowel	openkey-core::dispatch::main_key (new)	_vowelForMark iteration order = R1 (macOS order is spec)	S3
+handleQuickTelex	engine/Engine.cpp:1195	cc→ch, gg→gi, ...	openkey-core::quick::telex_pair (new)	writes hData[1],hData[0] explicitly	S3
+checkQuickConsonant	engine/Engine.cpp:1237	f→ph, g→ng, h→nh, k→ch with index shifting	openkey-core::quick::start_end_consonant (new)	word right-shift (1248-1252) is off-by-one prone	S3
+Patch (hCode/hBPC/hNCC/hData/hExt writes)	engine/Engine.cpp:60-64	every transform hand-writes the hook state	openkey-core::event::Patch { backspaces, letters } (new)	centralises the reversed-buffer convention	S3
+_vowel/_vowelCombine/_vowelForMark	engine/Vietnamese.cpp:19-168,244-332	vowel + mark charsets	openkey-core::tables::{VOWEL, VOWEL_COMBINE, VOWEL_FOR_MARK} (new)	std::map keyed by keycode: order differs per platform (R1)	S1
+_consonantTable/_endConsonantTable/_consonantD	engine/Vietnamese.cpp:170-242,334-374	consonant rows	openkey-core::tables::* (new)	rows OR flags into the key field (R8): move to RowFlags	S1
+_standaloneWbad/_doubleWAllowed	engine/Vietnamese.cpp:376-390	standalone-w restrictions	openkey-core::tables::{STANDALONE_W_BAD, DOUBLE_W_ALLOWED} (new)		S1
+_quickTelex/_quickStartConsonant/_quickEndConsonant	engine/Vietnamese.cpp:392-506	quick pairs	openkey-core::tables::QUICK_* (new)		S3
+douKey	engine/Vietnamese.cpp:14	a→â, e→ê legacy pair	—	VERIFIED UNUSED: declared Vietnamese.h:15, defined once, never read — drop, no behaviour	S5
+_codeTable[5]	engine/Vietnamese.cpp:411-494	5 code tables (Unicode, TCVN3, VNI-Windows, Compound, CP1258)	openkey-core::charset::tables::CODE_TABLES (new)	verbatim transcription + dump-diff test (AC4)	S5
+_unicodeCompoundMark	engine/Vietnamese.cpp:494	combining marks for Unicode Compound	openkey-core::charset::UNICODE_COMPOUND_MARK (new)	consumed by platform glue today (OpenKey.mm:325,476; OpenKey.cpp:255,351) — decoding moves into charset	S5
+_characterMap/keyCodeToCharacter	engine/Vietnamese.cpp:508-576	char↔key map with lazy inverse	openkey-core::keys::char_to_key (new)	macros depend on the inverse map	S6
+initMacroMap/getMacroSaveData	engine/Macro.cpp:80,112	macro byte format parse/serialise	openkey-core::macros::store (new)	format compatibility is open question Q4	S6
+findMacro	engine/Macro.cpp:155	macro lookup by key sequence	openkey-core::macros::resolve (new)	MUTATES its key argument in place (R7) — port pure	S6
+modifyCaseUnicode	engine/Macro.cpp:132	case-fold a word entry for auto-caps macros	openkey-core::macros::fold_case (new)	parity by index parity in code table rows	S6
+hasMacro/getAllMacro/addMacro/deleteMacro/onTableCodeChange	engine/Macro.cpp:199-246	macro CRUD	openkey-core::macros::store::* (new)		S6
+saveToFile/readFromFile	engine/Macro.cpp:248-293	macro persistence	openkey-platform::macro_persist (new)	file format compatibility is open question Q5	S6
+initSmartSwitchKey/getSmartSwitchKeySaveData/getAppInputMethodStatus/setAppInputMethodStatus	engine/SmartSwitchKey.cpp:19-73	per-app language memory	openkey-platform::app_memory (new)	needs OS app identity → not core	S7
+convertUtil/findKeyCode/getUnicodeCompoundMarkIndex	engine/ConvertTool.cpp:28-180	standalone text converter	openkey-cli::convert (new)	off the typing path; not M0/M1	S8
+utf8ToWideString/wideStringToUtf8	engine/Engine.cpp:127,131	UTF-8↔UTF-16 conversion	— (delete)	Rust String is UTF-8; keep only at legacy file edges	S1
+26 v* config globals	engine/Engine.h:44-188	user settings read across the engine	openkey-core::options::Options	split from runtime toggles (§3)	S1
