@@ -23,7 +23,7 @@ risk/rollback note (template in `.github/pull_request_template.md`).
 
 | Area | Required approvals | Extra rule |
 | --- | --- | --- |
-| `openkey-core` | 2 (one must be R2) | Parity impact statement mandatory; if R2 authored the PR, R3 or R7 reviews and R1 records the approval |
+| `openkey-core` | 2 (one must be R2) | Parity impact statement mandatory; when R2 authored the PR, DL-025 applies — a non-authoring lane reviews with the comment-only certification, preferring R3 then R7 — and R1 records the approval |
 | Platform adapters | 1 platform owner + 1 other engineer | Permission or security impact noted |
 | CI, packaging, signing | 1 (R6 or R2) | Must show artifact from the branch |
 | Docs | 1 | None |
