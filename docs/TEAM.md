@@ -43,7 +43,7 @@ budget of 20 turns. Windows, Linux and AI roles are deliberately not staffed yet
 | R2 | Ratify crate graph and core API; write ADR-0002; review CI | ADR accepted, key normalisation table drafted |
 | R3 | Read `Engine.cpp`; produce function-to-module porting map; design word model | Porting map, C-001 started |
 | R4 | Extract charset tables and option defaults from upstream sources | Table extraction plan, defaults audit |
-| R5 | Build headless reference engine (K-003), start corpus v0 (K-004) | Ref binary replays a script; >=100 cases |
+| R5 | Build headless reference engine (K-003), start corpus v0 (K-004) | Ref binary replays a script; corpus v0 at >=300 cases by G0 (>=100 is the halfway checkpoint; under 150 after three turns on K-004 triggers the QA staffing cliff in `PLAN.md` section 6) |
 | R6 | Make CI green on three OSes, repo settings, start packaging spike | Green pipeline, first unsigned artifacts |
 | R7 | macOS adapter spike, timeboxed at 3 turns: CGEventTap prototype | ADR-0004 recommendation |
 | R11 | Review corpus format; supply 50 spelling/orthography cases | Reviewed corpus rules |
