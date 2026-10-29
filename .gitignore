@@ -16,3 +16,6 @@ __pycache__/
 *.deb
 *.rpm
 *.AppImage
+
+# K-003: the pinned oracle checkout and the harness build
+.oracle/
