@@ -11,13 +11,23 @@ useDefault = true
 
 # Pinned oracle record and its byte-identical copy: only checksum lines are exempt.
 #
-# `condition = "AND"` is what makes this narrow, and it has to sit on the *rule* rather
-# than on the top-level table: in gitleaks 8.30.1 the top-level `[allowlist]` ignores
-# `condition` and combines its criteria as OR, so a path entry there exempts the whole
-# file. Measured, both spellings, on 8.30.1 — the columns are asserted in
-# scripts/ci/test_gitleaks_config.py and written up in docs/adr/0009-secrets-gate-scope.md.
-# Attaching the allowlist to the default rules by id merges into them — the rule bodies
-# are not restated here, so the default regexes and keywords stay upstream's.
+# `condition = "AND"` is what makes this narrow, and it is attached to the two *rules* rather
+# than to the top-level table because the top-level form's meaning depends on how the scan is
+# invoked. Measured on 8.30.1, same fixture and binary, both spellings:
+#
+#   top-level [allowlist] + condition="AND"   `gitleaks dir` -> combined as OR (keys hidden)
+#                                             `gitleaks git` -> AND (keys on other lines shown)
+#   [[rules.allowlists]] + condition="AND"    both modes     -> AND
+#
+# CI runs `git`; a developer or another tool may run `dir`, and a config that answers
+# differently depending on the subcommand is a trap even when the answer CI sees is right.
+# The rule-level form is the same answer in both modes, so the pin files cannot go quiet for
+# whoever runs the other command.
+#
+# Attaching the allowlist to the default rules by id merges into them — the rule bodies are
+# not restated here, so the default regexes and keywords stay upstream's. Every column in
+# both modes is asserted in scripts/ci/test_gitleaks_config.py; the write-up, including this
+# split, is docs/adr/0009-secrets-gate-scope.md.
 #
 # What this buys over a path-only entry: a key on a non-checksum line inside either file
 # is reported, where the path entry hid it.
@@ -31,7 +41,7 @@ useDefault = true
 #
 # If the gitleaks pin in `scripts/ci/fetch-gitleaks.sh` moves, re-run
 # `python3 scripts/ci/test_gitleaks_config.py` before trusting a green `secrets` job: the
-# pin is what makes "AND works at rule level, not at table level" a stable fact rather
+# pin is what makes "AND applies here, and the same way in both modes" a stable fact rather
 # than a version quirk.
 [[rules]]
 id = "generic-api-key"

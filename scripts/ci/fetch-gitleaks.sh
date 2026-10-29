@@ -4,10 +4,11 @@
 # Usage: scripts/ci/fetch-gitleaks.sh <dest-dir>        -> <dest-dir>/gitleaks
 #
 # One place for the version and the digests, so the `secrets` job, the nightly history
-# sweep and a developer's laptop cannot drift onto different binaries. The version is
-# part of the argument in docs/adr/0009-secrets-gate-scope.md: `condition` is honoured on
-# rule-level allowlists and ignored on the top-level table in 8.30.1, and that fact is
-# only stable because the binary is pinned by digest.
+# sweep and a developer's laptop cannot drift onto different binaries. The version is part of
+# the argument in docs/adr/0009-secrets-gate-scope.md: on 8.30.1 a top-level `condition` is
+# ignored by `gitleaks dir` and honoured by `gitleaks git`, which is why the shipped config
+# attaches its AND to the rules instead. That behaviour is only stable because the binary is
+# pinned by digest, and scripts/ci/test_gitleaks_config.py measures it in both modes.
 set -euo pipefail
 
 VERSION="8.30.1"

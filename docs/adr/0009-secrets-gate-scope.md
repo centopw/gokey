@@ -91,40 +91,62 @@ A finding survives only if **all** of: the file is one of the two pin files, the
 `"File.cpp": "<64 hex>"` shape, and the rule that found it is one of the two. Everything else in
 those files is now scanned like any other file.
 
+It is on the rules rather than on the top-level table for the reason §4 measures: the top-level form
+answers differently under `gitleaks dir` and `gitleaks git`, and the rule-level form does not.
+
 ### 4. The measurements, and the reason they are a test rather than a comment
 
-`scripts/ci/test_gitleaks_config.py` generates a five-file fixture in a temp directory and runs five
-configurations over it, comparing **sets of `(file, line, rule)`** — not counts, because two rules
-fire on the same line and a count hides which one. The fixture is generated rather than committed:
-the repository scans itself for credentials and should not carry planted ones in history, so the
-tokens are derived from fixed labels with `hashlib`/`base64` and are stable across runs.
+`scripts/ci/test_gitleaks_config.py` generates a five-file fixture in a temp directory, commits it
+as a one-commit repository, and runs five configurations over it **in both subcommands** —
+`gitleaks dir` and `gitleaks git` — comparing **sets of `(file, line, rule)`**, not counts, because
+two rules fire on the same line and a count hides which one. The fixture is generated rather than
+committed: the repository scans itself for credentials and should not carry planted ones in
+history, so the tokens are derived from fixed labels with `hashlib`/`base64` and are stable across
+runs.
 
-Columns on the pinned 8.30.1 (`.gitleaks.toml` is the shipped one):
+The two-mode shape is not belt-and-braces. It is the correction of an error in the first version of
+this ADR, which reported one mode's answer as a property of the pinned version (see the table). CI
+runs `git`; `dir` is what a developer or another tool reaches for; the suite measures the mode CI
+actually uses, and keeps `dir` because the difference is the finding.
+
+Columns on the pinned 8.30.1 (`.gitleaks.toml` is the shipped one; ×2 = two rules on one line):
 
 | fixture row | none | paths-only (pre-change) | line-OR (rejected) | table-AND (rejected) | rule-AND (shipped) |
 |---|---|---|---|---|---|
 | `docs/m0/ORACLE-PIN.json:3` — checksum line | reported | hidden | hidden | hidden | hidden |
-| `docs/m0/ORACLE-PIN.json:4` — key on its own line | reported | hidden | hidden | **hidden** | **reported** |
+| `docs/m0/ORACLE-PIN.json:4` — key on its own line | reported | hidden | hidden | **`dir`: hidden / `git`: reported** | **reported** |
 | `docs/m0/ORACLE-PIN.json:6` — key on a checksum line | reported | hidden | hidden | hidden | hidden |
 | `parity/oracle/pin.json` — same three rows | reported | hidden | hidden | as above | as above |
 | `src/app.rs:1` — key on a checksum-shaped line, file not listed | reported ×2 | reported ×2 | **hidden** | reported ×2 | reported ×2 |
 | `src/plain.env:1` — key, nothing else (canary) | reported | reported | reported | reported | reported |
+| totals, `gitleaks dir` | 9 | 3 | 1 | 3 | 5 |
+| totals, `gitleaks git` | 9 | 3 | 1 | **5** | 5 |
 
-Totals in `(file, line, rule)` rows: 9 / 3 / 1 / 3 / 5.
-
-Two of those columns are the argument:
+Three of those columns are the argument:
 
 - **`line-OR` is worse than the file exemption it replaced.** The top-level allowlist is global, so
   a line regex applies everywhere: a credential on any line that happens to carry a checksum-shaped
   pair is hidden *in a file the allowlist never names*. It reads narrower than `paths-only` and
   reports fewer findings.
-- **`table-AND` does not do what it looks like it does.** 8.30.1 ignores `condition` on the
-  top-level `[allowlist]`/`[[allowlists]]` table and combines the criteria as OR, so the column is
-  identical to `paths-only` byte for byte in results. `condition = "AND"` is honoured only on
-  `[[rules.allowlists]]`. A table produced from the top-level form is reproducible and means
-  something different from what its author read into it; the `table-and` column exists in the suite
-  so that if a future gitleaks starts honouring it there, the suite says so instead of silently
-  changing the shipped config's meaning.
+- **`table-AND` means different things depending on the subcommand.** `gitleaks dir` ignores a
+  top-level `condition` and combines the criteria as OR, so the whole file is exempt; `gitleaks git`
+  honours it, so a key on a non-checksum line is reported. Both spellings of the table
+  (`[allowlist]` and `[[allowlists]]`) behave the same way within a mode — the variable is the
+  subcommand, not the TOML. Neither answer is stable, so the shipped config does not use the form.
+  That rejection is stronger than the first draft's ("it is ignored"), because a config that is
+  correct only in the invocation CI happens to use is the same silent pass this ADR exists to
+  remove, one level down.
+- **`rule-AND` is the same answer in both modes** (5 rows each), which is the property that makes it
+  safe to rely on. It is also the narrowest of the working forms: the pin files lose nothing but
+  their checksum lines.
+
+Both mode columns are asserted, in both directions: `table-and` must stay at 3 under `dir` and 5
+under `git`, so a version change that makes the two agree — either way — stops the privacy of the
+difference from being assumed, and the ADR's reason for the rule-level form has to be re-measured
+rather than inherited.
+
+Two guards in the suite are worth naming because both failures it prevents actually occurred during
+development and both produced a confident, meaningless "0 findings":
 
 Two guards in the suite are worth naming because both failures it prevents actually occurred during
 development and both produced a confident, meaningless "0 findings":
@@ -138,6 +160,12 @@ development and both produced a confident, meaningless "0 findings":
    would fork them from the default ruleset, which is the thing `useDefault` exists to avoid. If a
    future version changed that merge, `github-pat` would stop firing everywhere — and the `repo`
    column, which asserts that the shipped config still reports all four non-checksum rows, fails.
+3. **The `git` fixture is committed, and `git add` is the trap.** A machine with `docs/` in
+   `core.excludesFile` silently drops `docs/m0/ORACLE-PIN.json` from a plain `git add -A`, and the
+   `git` columns then report six rows instead of nine with no error anywhere. The fixture is added
+   with `-f` and `core.excludesFile=/dev/null`, and the commit is checked against the fixture's
+   file list before anything is scanned, because the failure mode of the alternative is nine
+   assertions failing for the wrong reason — or, with a lazier assertion, passing.
 
 ### 5. The checksum-manifest entries are defensive, not demonstrated
 
@@ -155,15 +183,16 @@ may well trip the generic heuristic.
 
 ### 6. The version pin is part of the design
 
-`condition` and `regexTarget` are the load-bearing fields and their meaning is version-specific;
-that is measured, not assumed, and the measurement is why the config looks the way it does. The
+`condition` and `regexTarget` are the load-bearing fields, and their meaning is both
+version-specific and subcommand-specific — the second half is what the first version of this ADR got
+wrong. Every claim in §3-§4 is a measurement on one pinned binary, in both modes. The
 binary is pinned to 8.30.1 by SHA-256 in `scripts/ci/fetch-gitleaks.sh` — one place, used by the
 `secrets` job, the nightly sweep and a developer's laptop, so the three cannot drift.
 
-If that pin moves: fetch the new binary, run `scripts/ci/test_gitleaks_config.py`, and read the
-columns before touching the config. A version that honours `condition` on the top-level table, or
-changes how a partial rule override merges, fails the suite rather than quietly widening or
-narrowing the gate. Bumping the pin without running the suite is the one move that can turn a
+If that pin moves: fetch the new binary, run `scripts/ci/test_gitleaks_config.py`, and read both
+mode blocks before touching the config. A version that stops distinguishing the modes at top level,
+that changes how `dir` treats `condition`, or that changes how a partial rule override merges, fails
+the suite rather than quietly widening or narrowing the gate. Bumping the pin without running the suite is the one move that can turn a
 version change into a silent policy change.
 
 ### 7. Accepted residual
@@ -223,7 +252,9 @@ the control, and it is a weaker one than a detector. Stated rather than papered 
    on checksum lines, not to exempt the file's content.
 5. **Line-targeted allowlist on the top-level table.** Rejected on measurement: it is global, so it
    hides credentials in any file whose line happens to match (see §4).
-6. **`condition = "AND"` on the top-level table.** Rejected on measurement: 8.30.1 ignores it there
-   and behaves as OR, which is indistinguishable from option 4 in results while claiming otherwise.
+6. **`condition = "AND"` on the top-level table.** Rejected on measurement: its meaning follows the
+   subcommand — `dir` combines the criteria as OR (behaving like option 4 while claiming otherwise),
+   `git` applies the AND. It would work in CI today and stop working for anyone running `dir`, which
+   is the failure this ADR is about. The rule-level form measures the same in both modes.
 7. **Drop the `SHA256SUMS` entries as unproven.** Kept as defensive (§5) and asserted to be
    currently inert, so if they become load-bearing the suite says so.
