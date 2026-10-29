@@ -35,7 +35,7 @@
   "normative_platform": {
     "os": "macOS",
     "reason": "DL-003: the engine sources are the behaviour oracle and this is the build the oracle runs as. Where macOS and Windows disagree (map iteration order, crossed win32 keycode constants), the macOS behaviour is the spec.",
-    "pending": "Q2 in M0-backend-porting-map.md asks PM to record this formally."
+    "decided": "DL-026 (PM, 2026-10-29): the pinned macOS build is normative wherever macOS and Windows disagree. This answers Q3 in M0-backend-porting-map.md, not the Q2 that an earlier draft of this file named; it is no longer pending."
   },
   "baseline_contract": {
     "layout": "parity/corpus/<case-id>.json -> parity/baseline/<commit>/<case-id>.txt",
@@ -53,9 +53,11 @@
     {
       "id": "DEV-01",
       "what": "Windows keycode constants in upstream platforms/win32.h are crossed (KEY_BACKQUOTE=0xDC, KEY_BACK_SLASH=0xDE, KEY_QUOTE=0xC0).",
-      "decision": "GoKey writes its Windows table from the VK documentation; the upstream constants are not inherited.",
+      "status": "deferred",
+      "decision": "Reproduce by default; the fix is deferred to M4 (PM ruling, 2026-10-29). GoKey inherits the upstream constants unless a sponsor-approved change says otherwise: DL-013 requires sponsor approval for a fix, the constants are Windows-only, and 1.0 is macOS — the Windows adapter lands at M4. Nothing here is decided in favour of the fix.",
+      "if_fixed": "GoKey would write its Windows table from the VK documentation instead of inheriting the crossed constants. That is a fix, not reproduction, and it is out of scope until the M4 review.",
       "scope": "platform key translation only, not typing behaviour",
-      "needs": "corpus case so the deviation stays visible"
+      "needs": "corpus case so the deviation stays visible; revisit at M4"
     },
     {
       "id": "DEV-02",

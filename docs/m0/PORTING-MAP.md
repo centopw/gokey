@@ -461,7 +461,9 @@ oracle, with a comment citing `Engine.cpp:1105-1135` so nobody “tidies” it i
 `KEY_BACK_SLASH=0xDE` (`VK_OEM_7`, quote), `KEY_QUOTE=0xC0` (`VK_OEM_3`, backquote)
 (`win32.h:71-75`). The Windows build’s own word-break and `[`/`]` paths therefore run on the wrong
 physical keys. The scaffold’s design (semantic `Key` in core, native tables in adapters) does not
-inherit this. Log as a deliberate deviation with a corpus case.
+*have* to inherit this, but fixing it is a fix, not reproduction, and **PM ruled on 2026-10-29:
+reproduce by default, fix deferred to M4** (DL-013 needs sponsor approval for a fix; the constants
+are Windows-only and 1.0 is macOS). Log as a deviation with a corpus case and revisit at M4.
 
 **R3 — Global mutable state.** 30+ statics, single instance, no reentrancy. The scaffold’s owned
 `Engine` already avoids this; the risk is only if a ported function reaches for a static “because
@@ -626,7 +628,7 @@ core's public surface and avoids a second renderer.
 |---|---|---|---|
 | Q1 | ~~Confirm R-id → person mapping~~ **Answered:** R5 unstaffed → Backend interim (§7b) | PM | Closed; only the hand-off condition is open |
 | Q2 | Adopt R-API-1..5 in ADR-0002 before C-001/C-005 code lands | PM (ADR-0002, K-002) | Core-API change rule; R-API-3 changes every adapter |
-| Q3 | macOS build at the pinned hash is normative where macOS and Windows disagree (R1, R2) | PM to record | Decides whether the pinned order/quirks are the spec |
+| Q3 | ~~macOS build at the pinned hash is normative where macOS and Windows disagree (R1, R2)~~ **Answered 2026-10-29: DL-026** | PM | Closed. The pinned macOS build is the spec; DEV-02's macOS order is reproduction, not divergence |
 | Q4 | Output text: precomposed NFC, no decomposition? | Backend proposal → PM records | Upstream emits precomposed code points; macOS may normalise downstream. Affects every baseline |
 | Q5 | Macro persistence: read OpenKey’s byte format, or a new one? | Backend + PM | Decides whether a legacy parser ships |
 | Q6 | ~~Will `docs/` be restored~~ **Answered:** absent from `c64f8d6`; K-009 cannot close. Corpus-format extension (§5.2) still needs an owner decision | Admin / R5 | The format extension is now mine by default (§7b) — flagging rather than assuming |
@@ -636,7 +638,7 @@ core's public surface and avoids a second renderer.
 
 ## 9. What I need, one line each
 
-- **PM**: gate on exit criteria 4 and 5; record R-API-1..5, Q2, Q3, Q4, Q7; set the R5 hand-off
-  condition (§7b); state the ADR-0002 decision so C-001 can start.
+- **PM**: gate on exit criteria 4 and 5; record R-API-1..5, Q2, Q4, Q7 (Q3 is closed by DL-026); set
+  the R5 hand-off condition (§7b); state the ADR-0002 decision so C-001 can start.
 - **Admin/Hiep**: `docs/` in the repo — `TEAM.md` is what unblocks Q1.
 - **DevOps**: confirm the `macos-latest` job can build the headless C driver (`scripts/parity.sh` hook already exists in CI). If it cannot, DL-003’s revisit trigger fires.
