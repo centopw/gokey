@@ -1,0 +1,70 @@
+{
+  "schema": "gokey.oracle-pin/v1",
+  "purpose": "Pinned behaviour oracle for GoKey parity (PG-01). Every corpus baseline is an artefact of this hash.",
+  "upstream": {
+    "repo": "https://github.com/tuyenvm/OpenKey",
+    "ref_at_pin": "master",
+    "commit": "89c2fd3bf258562f2349f89b49d81e2f140c3fc3",
+    "commit_date": "2026-06-15T22:27:55+07:00",
+    "commit_subject": "Merge pull request #325 from nam268ek/codex/openkey-ui-spotlight-fixes",
+    "version_json": {
+      "latestVersion": { "versionName": "2.0.3", "versionCode": 47 },
+      "latestWinVersion": { "versionName": "2.0.2", "versionCode": 131074 }
+    },
+    "license": "GPL-3.0",
+    "license_file_sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+  },
+  "retrieval": {
+    "method": "git clone --depth 1 https://github.com/tuyenvm/OpenKey.git",
+    "retrieved_at": "2026-10-29T08:31:00Z",
+    "retrieved_by": "Backend Engineer (M0)",
+    "caveat": "Shallow clone: ancestry is not verified and the branch tip can move. CI must fetch the commit by hash, not by ref, and must fail if the resolved commit differs from 'upstream.commit'."
+  },
+  "engine_files_sha256": {
+    "Sources/OpenKey/engine/Engine.cpp": "d648dcc281ef489690ba783702bc7f5a7a526580e8596c85d827b77faa34db6b",
+    "Sources/OpenKey/engine/Vietnamese.cpp": "ed05dab8ff22f957de5d6955e3bb76e3fc32f43367fe1d4328a71a18815fb030",
+    "Sources/OpenKey/engine/DataType.h": "b87138d2b1c6960ce09d9e17d1ec41bef4fc647f54692e2d0bc7fe4ca8e9e560",
+    "Sources/OpenKey/engine/Engine.h": "d331168e5fd61d66c8502454b6441781bd0fbbbeba35f1184d1ad6b9e4c6bb48",
+    "Sources/OpenKey/engine/Macro.cpp": "b845ec8789dfce2a9b288023967c893ae7adfec5841a89db7aef663a9b0b8607",
+    "Sources/OpenKey/engine/SmartSwitchKey.cpp": "322218b6e465a35105e3ba68833b0e8c3d4e02e0b6de363d8e511b5056a794d3",
+    "Sources/OpenKey/engine/ConvertTool.cpp": "53e96f082ecf857e82a2bf640b15c32b57af6f184a9f4f86f208384dcd8251e3",
+    "Sources/OpenKey/engine/platforms/mac.h": "dc7d8f8e95c7e7dac542fb00c978272debefcab441a4816696a91f26fa00530c",
+    "Sources/OpenKey/engine/platforms/win32.h": "5f87c6edcf5f2f793851c70a27ebe9bfb0bdabfa8891f7751abc8c9e1024adcc",
+    "Sources/OpenKey/engine/platforms/linux.h": "ed5072ea629c6030425174f7b22f11b8fe8793f5ff0237538ab4e3480c99b83b"
+  },
+  "normative_platform": {
+    "os": "macOS",
+    "reason": "DL-003: the engine sources are the behaviour oracle and this is the build the oracle runs as. Where macOS and Windows disagree (map iteration order, crossed win32 keycode constants), the macOS behaviour is the spec.",
+    "decided": "DL-026 (PM, 2026-10-29): the pinned macOS build is normative wherever macOS and Windows disagree. This answers Q3 in M0-backend-porting-map.md, not the Q2 that an earlier draft of this file named; it is no longer pending."
+  },
+  "baseline_contract": {
+    "layout": "parity/corpus/<case-id>.json -> parity/baseline/<commit>/<case-id>.txt",
+    "keying": "baseline directory name MUST equal upstream.commit; mismatch fails CI",
+    "regen": "regenerating a baseline is a reviewable commit whose diff is the behaviour change (PG-02)",
+    "compare_on": "rendered document text after applying HookState (backspaces + reversed charData + restore re-synthesis), not raw engine bits",
+    "why_not_bits": "the low 16 bits of a TypingWord entry hold an OS keycode (KEY_A is 0 on macOS, 0x41 on Windows), so raw bit comparison is only meaningful with a fixed platform convention"
+  },
+  "oracle_build": {
+    "primary": "headless C driver linking the pinned Engine.cpp unmodified; applies HookState to an in-memory buffer using the rules in OpenKey.mm (backspaceCount, charData reversed, key re-send on vRestore)",
+    "calibration": "spot-check against the built macOS app driven by synthetic CGEvents on a corpus sample",
+    "open_dependency": "macOS CI runner availability (DevOps) — exit criteria 1 and 3"
+  },
+  "known_deviations_from_oracle": [
+    {
+      "id": "DEV-01",
+      "what": "Windows keycode constants in upstream platforms/win32.h are crossed (KEY_BACKQUOTE=0xDC, KEY_BACK_SLASH=0xDE, KEY_QUOTE=0xC0).",
+      "status": "deferred",
+      "decision": "Reproduce by default; the fix is deferred to M4 (PM ruling, 2026-10-29). GoKey inherits the upstream constants unless a sponsor-approved change says otherwise: DL-013 requires sponsor approval for a fix, the constants are Windows-only, and 1.0 is macOS — the Windows adapter lands at M4. Nothing here is decided in favour of the fix.",
+      "if_fixed": "GoKey would write its Windows table from the VK documentation instead of inheriting the crossed constants. That is a fix, not reproduction, and it is out of scope until the M4 review.",
+      "scope": "platform key translation only, not typing behaviour",
+      "needs": "corpus case so the deviation stays visible; revisit at M4"
+    },
+    {
+      "id": "DEV-02",
+      "what": "std::map iteration order over vowel charsets differs by platform because the map is keyed by OS keycode.",
+      "decision": "Rust uses ordered const arrays pinned to the macOS order; HashMap is banned for these tables.",
+      "scope": "core tables",
+      "needs": "comment citing Engine.cpp:1105-1135 in tables.rs + corpus coverage of mark-key matching"
+    }
+  ]
+}
