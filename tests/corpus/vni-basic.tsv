@@ -1,0 +1,22 @@
+# VNI: digit transformations and digits 1-5 as tones.
+# id	method	options	input	expected
+vni-a6	vni	-	a6	â
+vni-a8	vni	-	a8	ă
+vni-e6	vni	-	e6	ê
+vni-o6	vni	-	o6	ô
+vni-o7	vni	-	o7	ơ
+vni-u7	vni	-	u7	ư
+vni-d9	vni	-	d9	đ
+vni-a1	vni	-	a1	á
+vni-a2	vni	-	a2	à
+vni-a3	vni	-	a3	ả
+vni-a4	vni	-	a4	ã
+vni-a5	vni	-	a5	ạ
+vni-a61	vni	-	a61	ấ
+vni-d9a6y	vni	-	d9a6y	đây
+vni-tie61ng	vni	-	tie61ng	tiếng
+vni-d9uo7c5	vni	-	d9uo7c5	được
+vni-nguye64n	vni	-	nguye64n	nguyễn
+vni-truo7ng2	vni	-	truo7ng2	trường
+vni-nguoi72	vni	-	nguoi72	người
+vni-A61	vni	-	A61	Ấ

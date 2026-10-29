@@ -1,0 +1,24 @@
+# The same syllables in VNI, where the tone is a digit after the vowel and the
+# diacritics are 6 (circumflex), 7 (horn), 8 (breve), 9 (đ).
+# `vie65t` is the published example from tests/corpus/README.md rule 1.
+# id	method	options	input	expected
+vni-vie65t-published	vni	-	vie65t	việt
+vni-d9uo72ng	vni	-	d9uo72ng	đường
+vni-nguo72i	vni	-	nguo72i	người
+vni-truo72ng	vni	-	truo72ng	trường
+vni-hanh5	vni	-	hanh5	hạnh
+vni-phuc1	vni	-	phuc1	phúc
+vni-kho3e	vni	-	kho3e	khỏe
+vni-giu74a	vni	-	giu74a	giữa
+vni-ngoa2i	vni	-	ngoa2i	ngoài
+vni-nhu74ng	vni	-	nhu74ng	những
+vni-cung4	vni	-	cung4	cũng
+vni-d9a4	vni	-	d9a4	đã
+vni-se4	vni	-	se4	sẽ
+vni-ra61t	vni	-	ra61t	rất
+vni-nhie62u	vni	-	nhie62u	nhiều
+vni-la2m	vni	-	la2m	làm
+vni-vie65c	vni	-	vie65c	việc
+vni-ho6m	vni	-	ho6m	hôm
+vni-ye6u	vni	-	ye6u	yêu
+vni-d9a4-se4	vni	-	d9a4\sse4	đã sẽ
