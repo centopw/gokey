@@ -509,7 +509,7 @@ Reported, not patched, because each belongs to a task ID:
    Owner: whoever owns the bootstrap commit.
 2. **`Options::check_grammar` has no upstream counterpart and defaults to the inverted behaviour**
    (R-API-4). Decided in ADR-0002 D6: the field is deleted, `free_mark` replaces it, and C-007 is
-   dissolved.
+   re-scoped to corpus coverage with no option.
 3. **`charset.rs` says the code tables live in `Engine.cpp`;** they are in `Vietnamese.cpp`
    (`:411-494`), and `getCharacterCode` is in `Engine.cpp:501`. Doc-only, but it will mislead C-005.
 4. **`openkey-core` crate is named after the upstream product** while DL-010 is unresolved and the
@@ -558,8 +558,9 @@ Recommendation, as a plan change for the sponsor rather than something I can set
 - Do **not** keep a field called `check_grammar`: it cannot be mapped to any upstream control, so no
   corpus case could ever be written against it.
 
-**Outcome (2026-10-29): accepted in full.** C-007 is dissolved; `check_grammar` is deleted and
-`free_mark` added with persistence refused — ADR-0002 D6.
+**Outcome (2026-10-29): accepted in full.** C-007 is re-scoped to corpus coverage (no standalone
+feature, no option, no UI); `check_grammar` is deleted and `free_mark` added with persistence
+refused — ADR-0002 D6.
 
 ### 7b. R5 accepted as interim — the risk this creates, stated plainly
 
