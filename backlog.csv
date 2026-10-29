@@ -8,7 +8,7 @@ K-006,P0,M0,Compliance,"LICENSE, NOTICE, GPL attribution, upstream contact",R13,
 K-007,P0,M0,Bootstrap,"Packaging spike: unsigned app bundle, MSI and deb built in CI",R6,K-001,2,V-BUILD,Three artifacts produced; time-to-artifact documented
 K-008,P0,M0,macOS,"Spike: CGEventTap vs InputMethodKit, timebox three turns",R7,K-002,3,V-MAC,Prototype types into TextEdit; ADR-0004 recommendation
 K-009,P0,M0,Program,"Kickoff: confirm scope, staffing and platform order with sponsor",R1,-,1,V-DOC,Charter approved; DL-003 decided; roster committed
-AI-001,P1,M1,AI-Readiness,"Add ContextProvider, CaretRect and caret-anchored Suggestion types to openkey-platform (inert)",R2,C-001,1,V-AI,Traits compile on all targets; capability flags default false; no behaviour change
+AI-001,P1,M1,AI-Readiness,"Add ContextProvider, CaretRect and caret-anchored Suggestion types to openkey-platform (inert)",R2,C-001;C-017,1,V-AI,Traits compile on all targets; capability flags default false; no behaviour change
 AI-002,P1,M1,AI-Readiness,openkey-ai crate skeleton behind feature flag; CI forbids core dependency on it,R2,AI-001,2,V-AI,Crate builds; CI fails if openkey-core depends on openkey-ai; no network dependencies
 AI-003,P1,M1,AI-Readiness,Add ai section to Options (default off) and bump settings schema,R4,C-013,1,V-AI,Defaults off; existing settings migrate without loss
 C-001,P1,M1,Core,"Word model: letters, tones, marks, caps, replacing upstream bit masks",R3,K-002,2,V-CORE,Typed model covers all upstream marks; unit tests
@@ -17,13 +17,13 @@ C-003,P1,M1,Core,VNI engine,R4,C-002,2,V-CORE,VNI corpus agreement at least 99.5
 C-004,P1,M1,Core,Simple Telex 1 and 2 variants,R4,C-003,2,V-CORE,Both variants pass their corpus blocks
 C-005,P1,M1,Charset,"Code tables: Unicode, Unicode Compound, TCVN3, VNI-Windows, CP1258",R4,C-001,3,V-CORE,Round-trip tests per table; corpus cases per charset
 C-006,P1,M1,Core,Spelling check and restore-key-if-invalid-word,R3,C-002,3,V-CORE,Corpus spelling cases pass; rules documented
-C-007,P1,M1,Core,Grammar check,R4,C-006,2,V-CORE,Matches upstream on grammar corpus cases
+C-007,P1,M1,Core,Corpus coverage for grammar repositioning (free_mark gate); no standalone feature,R5,C-002,2,V-PARITY,Corpus cases prove grammar repositioning runs on normal keys and backspace and is gated only by free_mark; no vCheckGrammar option exists in Options; diffs against the reference are zero
 C-008,P1,M1,Core,"Option behaviours: modern orthography, quick Telex, quick start/end consonant, zfwj",R3,C-002,3,V-CORE,Each option has a dedicated corpus block
 C-009,P1,M1,Core,"Macro engine: matching, capitalisation variants, English mode",R4,C-002,3,V-CORE,Macro corpus passes; auto-caps parity
 C-010,P1,M1,Core,Smart switch key with per-application state,R3,C-002,2,V-CORE,Deterministic per-app table; unit tests
 C-011,P1,M1,Core,Auto uppercase first character of sentence,R4,C-002,1,V-CORE,Corpus cases pass
 C-012,P1,M1,Core,Convert tool: transcode text between charsets,R4,C-005,2,V-CORE,Round-trip conversions; exposed as CLI command
-C-013,P1,M1,Core,"Options defaults, JSON schema and migration from upstream settings",R3,K-002,2,V-CORE,Defaults verified against both upstream apps; schema versioned
+C-013,P1,M1,Core,"Options defaults, JSON schema and migration from upstream settings",R3,K-002,2,V-CORE,"Every default verified against the upstream macOS first-run profile (loadDefaultConfig), not the C initialisers; macOS/Windows divergences recorded in the C-013 matrix and scheduled with their platform milestone; migration handles keys absent from 1.x configs; free_mark persistence documented as new behaviour or refused"
 C-014,P1,M1,Parity,Scale corpus to 2000 cases; nightly differential fuzzing,R5,K-005,4,V-PARITY,30-minute nightly fuzz with zero unexplained diffs
 C-015,P1,M1,Quality,Property tests and no-panic fuzz around Engine::apply,R5,C-002,2,V-CORE,Arbitrary input never panics; buffer stays bounded at 32
 C-016,P1,M1,Quality,Criterion benchmarks against the C++ reference,R2,C-002,2,V-PARITY,Core p99 at most 0.5 ms per keystroke on reference hardware

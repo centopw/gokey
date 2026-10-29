@@ -88,6 +88,10 @@ day one. Windows, Linux and AI stay off the 1.0 critical path.
 - Each milestone budget already carries a 15% fix reserve. A milestone that
   spends more than 25% of its budget on rework is re-planned at the gate, not
   silently extended.
+- Interim coverage has an expiry: if corpus v0 is still under 150 cases after
+  three turns on K-004, the QA lane (R5) is staffed full-time and the interim
+  owners hand over. An interim role without a cliff is a permanent role nobody
+  resourced.
 
 ## 6. Definition of a milestone demo
 

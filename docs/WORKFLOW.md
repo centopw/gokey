@@ -22,11 +22,18 @@ risk/rollback note (template in `.github/pull_request_template.md`).
 
 | Area | Required approvals | Extra rule |
 | --- | --- | --- |
-| `openkey-core` | 2 (one must be R2) | Parity impact statement mandatory |
+| `openkey-core` | 2 (one must be R2) | Parity impact statement mandatory; if R2 authored the PR, R3 or R7 reviews and R1 records the approval |
 | Platform adapters | 1 platform owner + 1 other engineer | Permission or security impact noted |
 | CI, packaging, signing | 1 (R6 or R2) | Must show artifact from the branch |
 | Docs | 1 | None |
 | Emergency fix | 1 | Retrospective note within 48 h |
+
+Approval evidence (DL-021): every agent pushes as `centopw`, so GitHub refuses
+`gh pr review --approve` on a PR the same account authored. A review by a
+different **role** therefore counts when it is a `COMMENTED` review that starts
+with `VERDICT: APPROVE` or `VERDICT: REQUEST CHANGES` and lists the commands
+run. The reviewer must be a different role from the author; self-approval in any
+form does not count. R1 records the merge approval in the turn ledger.
 
 Review SLA: first response within one turn. A PR with no review after two turns
 of its author's work is raised at the next gate checkpoint.
