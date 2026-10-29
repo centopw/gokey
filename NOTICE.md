@@ -26,6 +26,12 @@ DL-010. "OpenKey" appears here and in the About dialog as attribution only —
 never as the product name, package name or icon. Crate names keep the
 `openkey-` prefix so the port stays traceable to its upstream sources.
 
+Binaries **are** produced: every merge to `main` builds an ad-hoc signed macOS
+`.dmg` as a CI artefact (K-007, ADR-0008). Those artefacts are public downloads on
+a public repository, so each one carries this NOTICE, `LICENSE` and a
+`SOURCE-OFFER.txt` naming the exact commit, and the source archive for that commit
+is attached beside it. That is a GPL-3.0 distribution and is treated as one.
+
 ## Attribution obligations
 
 - Keep this NOTICE and `LICENSE` in every distributed binary and source archive.

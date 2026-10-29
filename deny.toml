@@ -1,6 +1,12 @@
 [advisories]
 version = 2
 ignore = []
+# A yanked crate is withdrawn by its author for a reason. `warn` lets a yanked
+# dependency sit in a release because CI was read as "green enough".
+yanked = "deny"
+# Dependencies of workspace crates must not be unmaintained; transitive ones are
+# reported but do not fail the build until someone can act on them.
+unmaintained = "workspace"
 
 [licenses]
 version = 2

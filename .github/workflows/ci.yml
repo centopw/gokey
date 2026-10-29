@@ -1,16 +1,31 @@
 name: ci
 
+# Gate ladder — see docs/adr/0008-ci-gate-ladder.md.
+# G1 hygiene, G2 correctness, G3 parity, G4 supply chain run on every PR.
+# G5 (artefact) is workflows/package-macos.yml, main-only.
+# G6 (signed release) does not exist yet and is written at M3.
+
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Least privilege by default; individual jobs opt in to more.
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  RUST_BACKTRACE: "1"
+  # Keep in sync with rust-toolchain.toml — that file is what a local `cargo`
+  # honours, this is what CI installs. Two tokens, one value, bumped together.
+  RUST_VERSION: "1.99.0"
 
 jobs:
   build-test:
@@ -19,41 +34,133 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # Pinned labels, never `-latest`: ubuntu-latest moved to Ubuntu 26 on
+        # 2026-10-19 and turned unrelated PRs red.
+        os: [ubuntu-24.04, macos-15, windows-2025]
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable channel
         with:
+          toolchain: ${{ env.RUST_VERSION }}
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
+
+      # G1 — hygiene
       - name: Format
         run: cargo fmt --all -- --check
       - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      # G2 — correctness. `--all-targets` skips doctests, so they run separately.
       - name: Test
-        run: cargo test --workspace --all-targets
+        run: cargo test --workspace --all-targets --locked
+      - name: Doctests
+        run: cargo test --workspace --doc --locked
       - name: Docs
-        run: cargo doc --workspace --no-deps
+        run: cargo doc --workspace --no-deps --locked
+
+  core-purity:
+    name: core-purity
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable channel
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+      - name: Unit-test the gate before trusting it
+        # The scanner's dangerous failure is a silent pass, so its own tests run
+        # first. stdlib only: no pytest dependency on a gate that must not break.
+        run: python3 -m unittest discover -s scripts/ci -p 'test_*.py' -v
+      - name: openkey-core has no I/O, no globals, no unsafe, no platform crate
+        run: python3 scripts/ci/check-core-purity.py
+
+  no-network:
+    name: no-network
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable channel
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+      - name: 1.0 ships no HTTP client and no async runtime
+        run: python3 scripts/ci/check-no-network.py
 
   licenses:
     name: licenses
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: EmbarkStudios/cargo-deny-action@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check licenses bans sources advisories
+          arguments: --locked
+
+  secrets:
+    name: secrets
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # full history: a secret removed in a later commit is still leaked
+      # The CLI rather than gitleaks-action: the action wants a licence secret for
+      # organisations, which fork PRs never receive, so it would skip where it matters.
+      - name: gitleaks (pinned, checksum-verified)
+        env:
+          GITLEAKS_VERSION: "8.30.1"
+          GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+        run: |
+          set -euo pipefail
+          curl -sSfL -o /tmp/gitleaks.tgz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  /tmp/gitleaks.tgz" | sha256sum -c -
+          tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
+          /tmp/gitleaks git . --config .gitleaks.toml --redact --no-banner --exit-code 1
+
+  sbom:
+    name: sbom
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable channel
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
+      - name: Install cargo-cyclonedx
+        run: cargo install cargo-cyclonedx --version 0.5.9 --locked
+      - name: Generate CycloneDX SBOM
+        run: cargo cyclonedx --all --format json --spec-version 1.5
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sbom
+          path: "**/*.cdx.json"
+          if-no-files-found: error
+          retention-days: 30
 
   parity:
     name: parity
-    if: github.event_name == 'pull_request'
-    runs-on: macos-latest
+    # The reference C++ engine builds headless on Linux, so parity needs no macOS
+    # runner. The trigger is evidence, not a date (DL-019): the gate is green while
+    # there is nothing to compare, and becomes blocking the moment corpus fixtures
+    # exist without a harness to replay them. A calendar deadline here fails every
+    # PR in the repo at once, including ones that touched nothing related.
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable channel
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
       - name: Parity suite
         run: |
+          set -euo pipefail
           if [ -x scripts/parity.sh ]; then
             ./scripts/parity.sh
-          else
-            echo "::warning::parity harness not present yet (tasks K-003 / K-004 / C-015)"
+            exit 0
           fi
+          fixtures="$(git ls-files | grep -Ei '(^|/)corpus/' | grep -v -E '(^|/)README\.md$' || true)"
+          if [ -n "$fixtures" ]; then
+            echo "::error::corpus fixtures exist but scripts/parity.sh does not (K-005): parity is unmeasured, not pending"
+            printf '%s\n' "$fixtures" | head -10
+            exit 1
+          fi
+          echo "::notice::no corpus fixtures and no harness yet (K-003 / K-004 / K-005): parity has nothing to compare"

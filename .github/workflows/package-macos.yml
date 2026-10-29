@@ -1,0 +1,87 @@
+name: package-macos
+
+# G5 — the artefact gate (ADR-0008 §2). Starts at M0 because K-007's acceptance is
+# "artifacts produced; time-to-artifact documented", i.e. it *is* a CI artefact job.
+#
+# Ad-hoc signed, no tag, no GitHub Release, not notarised, not linked from anywhere.
+# Nobody is expected to install these; they exist so the bundle layout, Info.plist,
+# codesign flag path and hdiutil are exercised from W2 instead of first meeting a
+# release milestone. M2 adds a committed self-signed identity, M3 Developer ID +
+# notarisation (DL-022 fixes the identifier and the .app filename, so neither of
+# those later steps renames anything).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    # Only when the packaging path itself changes: the job is ~2 min of macOS time
+    # and there is nothing new to learn from running it on a core-only diff.
+    paths:
+      - ".github/workflows/package-macos.yml"
+      - "packaging/**"
+      - "NOTICE.md"
+      - "LICENSE"
+  workflow_dispatch:
+
+concurrency:
+  group: package-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_VERSION: "1.99.0"
+
+jobs:
+  dmg:
+    name: dmg (ad-hoc, internal)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable channel
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
+
+      - name: Start timer
+        id: timer
+        run: echo "start=$(date +%s)" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        run: cargo build --release --locked -p openkey-cli
+
+      - name: Build and verify dmg
+        run: ./packaging/macos/build-dmg.sh --binary target/release/openkey --out dist
+
+      # K-007's second acceptance criterion: the number, not just the artefact.
+      - name: Record time-to-artifact
+        env:
+          START: ${{ steps.timer.outputs.start }}
+        run: |
+          set -euo pipefail
+          elapsed=$(( $(date +%s) - START ))
+          {
+            echo "time-to-artifact: ${elapsed}s"
+            echo "commit: $GITHUB_SHA"
+            echo "run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          } | tee dist/time-to-artifact.txt
+          echo "### time-to-artifact: ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
+
+      # Corresponding source for the artefact, next to the artefact. A public
+      # repository's Actions artefacts are downloadable by anyone, so this upload
+      # is a GPL-3.0 distribution from the first run (ADR-0008 §3).
+      - name: Fetch corresponding source and hash everything
+        run: |
+          set -euo pipefail
+          curl -sSfL -o dist/source.tar.gz \
+            "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/archive/$GITHUB_SHA.tar.gz"
+          ( cd dist && shasum -a 256 ./*.dmg source.tar.gz time-to-artifact.txt > SHA256SUMS && cat SHA256SUMS )
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: gokey-macos-dmg-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
