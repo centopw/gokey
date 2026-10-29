@@ -1,0 +1,17 @@
+# Simple Telex: the same sequences without the w shortcuts.
+# id	method	options	input	expected
+simple-aa	simple_telex_1	-	aa	â
+simple-ee	simple_telex_1	-	ee	ê
+simple-oo	simple_telex_1	-	oo	ô
+simple-dd	simple_telex_1	-	dd	đ
+simple-hocj	simple_telex_1	-	hocj	học
+simple-nois	simple_telex_1	-	nois	nói
+simple-vieejt	simple_telex_1	-	vieejt	việt
+simple-tieengs	simple_telex_1	-	tieengs	tiếng
+simple-tooi	simple_telex_1	-	tooi	tôi
+# Simple Telex 1 places the tone inside `uo` differently from Telex: `nguoif`
+# is `nguòi` here, not `người`. Recorded as the engine behaves (DL-026).
+simple-khoe	simple_telex_1	-	khoer	khỏe
+simple-duoc	simple_telex_1	-	dduwowcj	được
+simple-nguoi	simple_telex_1	-	nguoif	nguòi
+simple2-duoc	simple_telex_2	-	dduwowcj	được
