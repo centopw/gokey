@@ -122,6 +122,8 @@ recorded evidence does not count as spent against the milestone budget.
 - The corpus is the contract. A behaviour change without a corpus case is a bug.
 - Deliberate divergence from upstream requires sign-off from R2 and R11, a
   comment in the corpus line, and a changelog entry. Never "fix" a quirk silently.
+  DL-013 is `Decided` for the same rule and adds the fourth party: a fix also
+  needs sponsor approval, so R2 and R11 agreeing is necessary and not sufficient.
 - A parity regression blocks merge, not just release.
 - Coverage gate: `openkey-core` line coverage >= 85% at G1.
 
@@ -269,6 +271,6 @@ decisions (`DL-nnn`).
 
 | ID | Gate | Passes when |
 | --- | --- | --- |
-| PG-01 | Pinned oracle and baseline | `docs/m0/ORACLE-PIN.json` (machine copy `parity/oracle/pin.json`) records the oracle commit and the sha256 of every vendored engine file; every baseline directory is named for that commit; a mismatch fails CI (`scripts/ci/check-oracle-pin.py`) rather than producing a diff nobody reads |
+| PG-01 | Pinned oracle and baseline | `docs/m0/ORACLE-PIN.json` records the oracle commit and the sha256 of every vendored engine file; every baseline directory is named for that commit; a mismatch fails CI (`scripts/ci/check-oracle-pin.py`) rather than producing a diff nobody reads. **Not yet complete as specified in `PORTING-MAP.md` §5:** the machine copy at `parity/oracle/pin.json` and the "fails if the two disagree" check were K-003 obligations and were not in #11, so today the pin file is single-sourced and `scripts/parity.sh` verifies it directly |
 | PG-02 | Parity evidence | A baseline is regenerated only by a reviewable commit whose diff *is* the behaviour change; agreement is measured on rendered document text after `HookState` (backspaces, reversed `charData`, restore re-synthesis), never on raw engine bits, whose low 16 bits hold an OS keycode |
 | PG-03 | Licence and source offer are inputs | The GPL-3.0 text, the NOTICE with upstream credit and the corresponding-source offer ship *with* the first artefact, not at 1.0. A Rust port is a derivative work, so these are structural and cannot be relaxed later |

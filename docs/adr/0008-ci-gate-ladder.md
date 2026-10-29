@@ -50,8 +50,9 @@ Tiers are numbered, not lettered, and an individual CI gate is named by its job 
 branch protection and the Actions UI show. `G0`–`G6` are reserved for milestone gates and mean
 nothing else (`PLAN.md` §2: `G5` is "types Vietnamese in GTK and Qt apps on GNOME and KDE", three
 milestones away from this ADR's artefact gate, and `G6` is the AI-assist gate; the reservation runs
-to `G6` because `PLAN.md` defines six milestones, and a reservation that stops short of the last one
-would be the same ambiguity this section exists to remove).
+to `G6` because `PLAN.md` defines seven milestones, `M0`–`M6` (`grep -cE '^\| \*\*M[0-9]'
+→ 7`), and a reservation that stops short of the last one would be the same ambiguity this section
+exists to remove).
 
 Tiers 1 and 2 must run on all three OSes even though 1.0 ships on one. `openkey-core` is supposed to
 be free of platform keycodes and I/O; a crate that only compiles on macOS has already broken that
