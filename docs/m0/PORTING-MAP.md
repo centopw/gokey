@@ -3,8 +3,12 @@
 Owner: Backend Engineer (R3, + R5 accepted as interim — see §7b) · Created 2026-10-29
 Status: **proposal for review — M0 exit criteria 4 and 5, plus PG-01**
 Behaviour oracle: `github.com/tuyenvm/OpenKey` @ `89c2fd3bf258562f2349f89b49d81e2f140c3fc3` → `ORACLE-PIN.json`
-Target repo: `github.com/centopw/gokey` @ `c64f8d6` (`openkey-rs` workspace)
+Target repo: `github.com/centopw/gokey` @ `dd99783` (`openkey-rs` workspace; `docs/` landed on
+`main` at `c67ab1a`, and `.gitignore` now re-includes it at `dd99783`)
 Scope: analysis + design. **No Telex implementation** (per kickoff). No behaviour code in this delivery.
+Platform decision (sponsor, 2026-10-29): **1.0 is macOS-only**; Windows and Linux follow at M4/M5,
+but every crate keeps compiling on all three OSes from M0. The oracle therefore stays the macOS
+engine build — which is what §6 R1/R2 already assumes.
 
 ---
 
@@ -490,6 +494,36 @@ Two mitigations I will apply, and one I need from PM:
   resourced.
 
 ---
+
+### 7d. AI seams — annotated, not implemented (sponsor direction, 2026-10-29)
+
+1.0 is macOS-only and ships **no** AI. `ARCHITECTURE.md` §11 defines the seams; this section only
+records where each one sits relative to the port, so that C-001/C-002 do not accidentally build a
+shape that the seam cannot attach to later. **No M0 or M1 task is created by this section.**
+
+| Seam (`ARCHITECTURE.md` §11) | Owner | Where it lives in the port | Binding rule |
+|---|---|---|---|
+| Current word buffer | `openkey-core`, **read-only** | `Engine::word()` returning `&Word` — the same accessor C-001 needs for its own tests; replaces today's `Engine::buffer()` | Must never be an input to `apply`. It is an observer of state, not part of it. |
+| Caret position (`CaretRect`, `caret_rect()`) | `openkey-platform` | Adapter. Upstream has no equivalent symbol: the C engine never knows where the caret is | Core must not gain a caret field and `Edit` must not gain a caret field. If a caret value ever reaches `apply`, parity is unreproducible. |
+| Surrounding text (`TextContext { before_caret, app, secure }`) | `openkey-platform` (`AppId` already exists) | Adapter-side `ContextProvider`; `before_caret` bounded (512 chars in the doc) | `apply` may not accept `TextContext` at all — determinism boundary, §11 rule 3. |
+| Suggestion accept | `openkey-platform` → `emit` | Ordinary `Edit` through the existing emit path, one undo unit | Reinforces R-API-2: `Edit` must stay the single output channel. Do not carry suggestions on `Action` and do not overload the ext code (R-API-3). |
+| `openkey-ai` crate | post-1.0, never linked into 1.0 | Not in the workspace dependency graph | CI must fail if `openkey-core` depends on it (§11 rule 3). |
+
+**Why "read-only" is a correctness statement, not a preference.** If `Engine::apply` ever consulted
+context or caret, its output would depend on ambient application state, and the parity corpus would
+stop being reproducible: every case would silently need an app id, a caret rect and a surrounding
+text stub, and a macOS focus change would become a corpus input. The observable test is structural —
+`apply(&mut self, &KeyEvent) -> Outcome` keeps that exact signature and `Engine` gains no context
+field, so the violation is a compile error rather than a review note.
+
+**Cost to the port: one accessor.** C-001 already needs `Engine::word()` to assert the word model, so
+the buffer seam is free. The other four rows are adapter-side or absent, and cost nothing until the
+AI milestone.
+
+**Q8 (new):** should the buffer seam expose the typed `Word` or the **rendered** text (through
+`charset`)? For 1.0 it is inert either way. Recommendation: `&Word` for the engine's own tests, plus
+a separate `rendered()` on the adapter side if post-1.0 needs text — keeps charset selection out of
+core's public surface and avoids a second renderer.
 
 ## 8. Open questions
 
