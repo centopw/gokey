@@ -1,9 +1,9 @@
 name: ci
 
 # Gate ladder — see docs/adr/0008-ci-gate-ladder.md.
-# G1 hygiene, G2 correctness, G3 parity, G4 supply chain run on every PR.
-# G5 (artefact) is workflows/package-macos.yml, main-only.
-# G6 (signed release) does not exist yet and is written at M3.
+# Tiers 1-4 run on every PR: 1 hygiene, 2 correctness, 3 parity, 4 supply chain.
+# Tier 5 (artefact) is workflows/package-macos.yml, main-only.
+# Tier 6 (signed release) does not exist yet and is written at M3.
 
 on:
   push:
@@ -45,13 +45,13 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
 
-      # G1 — hygiene
+      # tier 1 — hygiene
       - name: Format
         run: cargo fmt --all -- --check
       - name: Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
-      # G2 — correctness. `--all-targets` skips doctests, so they run separately.
+      # tier 2 — correctness. `--all-targets` skips doctests, so they run separately.
       - name: Test
         run: cargo test --workspace --all-targets --locked
       - name: Doctests
@@ -157,9 +157,14 @@ jobs:
             ./scripts/parity.sh
             exit 0
           fi
-          fixtures="$(git ls-files | grep -Ei '(^|/)corpus/' | grep -v -E '(^|/)README\.md$' || true)"
+          # Every tracked `.tsv` is evidence the gate is owed, not just the ones
+          # under `tests/corpus/`: `scripts/parity/smoke.tsv` is the eleven cases
+          # the gate's blocking behaviour actually rests on, and a grep for a
+          # `corpus/` path component would let a lost executable bit on
+          # `scripts/parity.sh` fall through to the notice below.
+          fixtures="$(git ls-files '*.tsv')"
           if [ -n "$fixtures" ]; then
-            echo "::error::corpus fixtures exist but scripts/parity.sh does not (K-005): parity is unmeasured, not pending"
+            echo "::error::parity fixtures exist but scripts/parity.sh is missing or not executable (K-003 / K-005): parity is unmeasured, not pending"
             printf '%s\n' "$fixtures" | head -10
             exit 1
           fi
