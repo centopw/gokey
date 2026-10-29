@@ -1,0 +1,24 @@
+# Telex: whole syllables and words, the shape a user types.
+# id	method	options	input	expected
+telex-tooi	telex	-	tooi	tôi
+telex-mej	telex	-	mej	mẹ
+telex-boos	telex	-	boos	bố
+telex-chaof	telex	-	chaof	chào
+telex-camr	telex	-	camr	cảm
+telex-own	telex	-	own	ơn
+telex-haf	telex	-	haf	hà
+telex-hocj	telex	-	hocj	học
+telex-nois	telex	-	nois	nói
+telex-caxi	telex	-	caxi	cãi
+telex-ddaay	telex	-	ddaay	đây
+telex-mowis	telex	-	mowis	mới
+telex-vieejt	telex	-	vieejt	việt
+telex-tieengs	telex	-	tieengs	tiếng
+telex-dduwowcj	telex	-	dduwowcj	được
+telex-nguyeenx	telex	-	nguyeenx	nguyễn
+telex-truowngf	telex	-	truowngf	trường
+telex-dduwowngf	telex	-	dduwowngf	đường
+telex-nguowif	telex	-	nguowif	người
+telex-vieejt-cap	telex	-	Vieejt	Việt
+telex-vieejt-upper	telex	-	VIEEJT	VIỆT
+telex-two-words	telex	-	tieengs\sVieejt	tiếng Việt
