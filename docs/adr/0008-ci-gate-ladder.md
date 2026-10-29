@@ -1,4 +1,4 @@
-# ADR-0008 — CI gate ladder, artefact policy and the G5-at-M0 ruling
+# ADR-0008 — CI gate ladder, artefact policy and the artefact gate at M0
 
 - Status: proposed
 - Date: 2026-10-29
@@ -22,8 +22,8 @@ Three facts shape the design.
    against the pinned engine produces `aa → U+00E2`, `dd → U+0111`, `vieejt → U+00EA`.
 2. **The repository is public.** Every GitHub Actions artefact is downloadable by anyone. The first
    uploaded dmg is therefore a GPL-3.0-covered distribution, not an internal build, whatever the
-   intent behind it. G5 cannot exist without K-006's licence obligations being met in the artefact
-   itself.
+   intent behind it. The artefact gate cannot exist without K-006's licence obligations being met in
+   the artefact itself.
 3. **1.0 is macOS-only** (DL-003 / DL-014, decided 2026-10-29). Windows and Linux ship as M4 and
    M5, but the workspace must keep building and testing on all three OSes so the platform
    abstraction cannot rot while nobody is looking at it.
@@ -35,19 +35,24 @@ Three facts shape the design.
 Six blocking gates plus one nightly, ordered cheapest-first so a broken PR fails in ~30 s rather
 than after a macOS build.
 
-| Gate | Job | Runner | Trigger | Blocking |
+| Tier | Job | Runner | Trigger | Blocking |
 |---|---|---|---|---|
-| G1 hygiene | `build-test` (fmt, clippy `-D warnings`) | ubuntu, macOS, windows | PR + main | yes |
-| G2 correctness | `build-test` (test, doctest, doc) | ubuntu, macOS, windows | PR + main | yes |
-| G3 parity | `parity` | ubuntu | PR + main | yes once corpus fixtures exist; every PR once `scripts/parity.sh` exists |
-| G4 supply chain | `licenses`, `secrets`, `sbom` | ubuntu | PR + main | yes |
-| G5 artefact | `package-macos` | macOS | main, and PRs touching packaging | yes |
-| G6 release | not in this ADR | — | tag | see §4 |
-| G7 manual | checklist, human | 3 machines | every release | yes, manual |
-| G8 nightly | `nightly` | ubuntu | cron + dispatch | **no** — triaged daily, never merge-blocking |
+| tier 1 (hygiene) | `build-test` (fmt, clippy `-D warnings`) | ubuntu, macOS, windows | PR + main | yes |
+| tier 2 (correctness) | `build-test` (test, doctest, doc) | ubuntu, macOS, windows | PR + main | yes |
+| tier 3 (parity) | `parity` | ubuntu | PR + main | yes once corpus fixtures exist; every PR once `scripts/parity.sh` exists |
+| tier 4 (supply chain) | `licenses`, `secrets`, `sbom` | ubuntu | PR + main | yes |
+| tier 5 (artefact) | `package-macos` | macOS | main, and PRs touching packaging | yes |
+| tier 6 (release) | not in this ADR | — | tag | see §4 |
+| tier 7 (manual) | checklist, human | 3 machines | every release | yes, manual |
+| tier 8 (nightly) | `nightly` | ubuntu | cron + dispatch | **no** — triaged daily, never merge-blocking |
 
-G1/G2 must run on all three OSes even though 1.0 ships on one. `openkey-core` is supposed to be
-free of platform keycodes and I/O; a crate that only compiles on macOS has already broken that
+Tiers are numbered, not lettered, and an individual CI gate is named by its job — which is what
+branch protection and the Actions UI show. `G0`–`G5` are reserved for milestone gates and mean
+nothing else (`PLAN.md` §2: `G5` is "types Vietnamese in GTK and Qt apps on GNOME and KDE", three
+milestones away from this ADR's artefact gate).
+
+Tiers 1 and 2 must run on all three OSes even though 1.0 ships on one. `openkey-core` is supposed to
+be free of platform keycodes and I/O; a crate that only compiles on macOS has already broken that
 rule, and the failure surfaces with a misleading error at M4.
 
 `parity` is the one gate whose blocking state changes on its own, and it changes on **evidence, not
@@ -59,13 +64,13 @@ would fail every PR in the repository at once, including ones that touched nothi
 nobody re-reads a stale date in a workflow file. That is the same day-based planning DL-019 removed,
 in the place where it does the most damage.
 
-### 2. G5 starts at M0, not M3
+### 2. The artefact gate starts at M0, not M3
 
 `K-007`'s acceptance is "artifacts produced; time-to-artifact documented". That is an artefact job,
-so the gate and the task are the same thing. Deferring G5 to M2 would have made the first dmg
-appear at the same moment it had to be notarised, meaning the bundle layout, `Info.plist`, the
-InputMethodKit install path and any `install_name_tool` work would get their first exercise inside
-a release.
+so the gate and the task are the same thing. Deferring the artefact gate to M2 would have made the
+first dmg appear at the same moment it had to be notarised, meaning the bundle layout, `Info.plist`,
+the InputMethodKit install path and any `install_name_tool` work would get their first exercise
+inside a release.
 
 Therefore: **every merge to `main` emits an ad-hoc signed dmg as a CI artefact.** No tag, no
 GitHub Release, no notarisation, no external link, nobody is expected to install it.
@@ -93,9 +98,9 @@ The dmg job therefore carries, inside the disk image:
   corresponding source;
 
 and the workflow artefact additionally contains the source tarball for that commit plus a
-`SHA256SUMS` file. This is the minimum that makes G5-at-M0 lawful. It does **not** replace K-006's
-human half (upstream contact, sponsor signature on DL-001), which is a precondition for the first
-artefact, not for M0 exit.
+`SHA256SUMS` file. This is the minimum that makes the M0 artefact lawful. It does **not** replace
+K-006's human half (upstream contact, sponsor signature on DL-001), which is a precondition for the
+first artefact, not for M0 exit.
 
 `NOTICE.md` currently states that the project "publishes no binaries". That sentence becomes false
 with this ADR and is corrected in the same change.
@@ -107,10 +112,10 @@ That is the same mistake as a job that passes because it found nothing: a workfl
 exercised is untested automation, and it would sit for four milestones accumulating assumptions
 about notarisation, stapling and asset naming that nobody can validate.
 
-G6 at M3 is small and is written when it can be run against a real tag. What belongs here, now, is
-the prerequisite list (see `M0-CI-gates-and-three-OS-packaging.md` §4): Developer ID Application
-certificate, Apple org enrolment started in W2, protected `v*` tags, a `release` environment with
-required reviewers, and the notarisation/stapling commands.
+The signed-release workflow at M3 is small and is written when it can be run against a real tag.
+What belongs here, now, is the prerequisite list (see `M0-CI-gates-and-three-OS-packaging.md` §4):
+Developer ID Application certificate, Apple org enrolment started in W2, protected `v*` tags, a
+`release` environment with required reviewers, and the notarisation/stapling commands.
 
 ### 5. Runner and toolchain pinning
 
@@ -192,8 +197,8 @@ that is the only part made of process rather than code, and it is stated here so
 
 1. **All gates in one job.** Faster to write, impossible to see which gate failed, and one runner
    image for all checks means a Windows-only failure reports as a hygiene failure.
-2. **G5 at M2 as originally planned.** Rejected: makes K-007 unpassable and defers the first
-   bundle exercise to the release milestone.
+2. **The artefact gate at M2 as originally planned.** Rejected: makes K-007 unpassable and defers
+   the first bundle exercise to the release milestone.
 3. **`gitleaks-action`.** Requires a licence secret for organisations, which fork PRs do not get,
    so the job would skip exactly where it matters. A pinned, checksum-verified gitleaks binary has
    no secret and no conditional path.
