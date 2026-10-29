@@ -4,9 +4,14 @@
 - **Date**: 2026-10-29
 - **Author**: R2 (technical lead)
 - **Task**: K-002 (`backlog.csv`)
-- **Acceptance**: boundary review by R3 and R4 (K-002 acceptance cell)
-- **Ratifies**: `docs/ARCHITECTURE.md` sections 2–4, which have carried a
-  "pending ADR-0002 sign-off" status line since bootstrap (`ARCHITECTURE.md:3`)
+- **Acceptance**: boundary review by a lane that did not author this ADR.
+  DL-025 replaced the role-pinned cell, because R2/R3/R4 are one staffed lane and
+  that lane is the author. The review recorded on this PR is R6 (DevOps
+  Engineer), run against this head with its own commands.
+- **Ratifies** (on acceptance): `docs/ARCHITECTURE.md` sections 2–4, which have
+  carried a "pending ADR-0002 sign-off" status line since bootstrap
+  (`ARCHITECTURE.md:3`). While this ADR is `proposed`, `ARCHITECTURE.md` says so
+  rather than "ratified" — the two files must not disagree at any commit.
 - **Related decisions**: DL-002, DL-007, DL-008, DL-011, DL-013, DL-014, DL-018, DL-019, DL-021
 
 ## Context
@@ -48,14 +53,24 @@ Accept `ARCHITECTURE.md` section 2 as normative:
 
 - `openkey-core` depends on nothing in this workspace and never on
   `openkey-platform` or an adapter.
-- `openkey-platform` depends on core; adapters and `openkey-cli` depend on both.
+- `openkey-platform` depends on core; the three adapters depend on both.
+  `openkey-cli` depends on core **only** (`crates/openkey-cli/Cargo.toml`), so a
+  replay run cannot reach the platform layer. Adding platform to the driver is an
+  amendment, not an edit: a driver that links adapters can observe or emit host
+  state, and the replay diff would stop being a statement about the engine.
 - `openkey-ai` is post-1.0, is never a dependency of core, and is never linked
   into the 1.0 binary.
 
-Enforcement available today: `#![forbid(unsafe_code)]` in core plus V-CORE's
-"no `unsafe`, no `cfg(target_os)` in core" pass condition (`WORKFLOW.md`
-section 13), and review. A CI check on core's resolved dependency list is named
-as a follow-up for C-017, not claimed as existing.
+Enforcement available today: `core-purity` (`scripts/ci/check-core-purity.py`,
+`.github/workflows/ci.yml`), added by the gate ladder in `c6c2777` and green on
+every PR and all three OSes since; `ec75ea7` is the `main` head this ADR is
+written against. It asserts the graph three ways — core's declared
+`[dependencies]` carry no platform crate and no `openkey-ai`; the resolved normal
+closure (`cargo tree -p openkey-core --edges normal --prefix none --locked`)
+carries neither; and core's sources carry no banned I/O, global or `unsafe`
+token. What it does **not** assert is `#![forbid(unsafe_code)]` at the crate
+root, or the absence of `cfg(target_os)` in core. Those stay V-CORE's pass
+condition (`WORKFLOW.md` section 13) and are handed to C-017 to gate.
 
 ### D2 — The public surface of `openkey-core`
 
@@ -69,8 +84,18 @@ pub use options::{Charset, InputMethod, Options};
 
 Rules:
 
-- Anything not on this list is private. `Engine` exposes state through
-  accessors (`options()`, `buffer()`), never through fields.
+- The list above is the whole public surface, and nothing off it is reachable.
+  That is **not true of the crate today**: `lib.rs` declares `pub mod charset;
+  pub mod engine; pub mod event; pub mod options;` (`lib.rs:18-21`), so every
+  `pub` item inside those four modules is reachable by path whether or not it is
+  re-exported — `openkey_core::event::Edit` today, and whatever C-001 and C-005
+  add there later. The rule becomes enforceable only when the modules are private
+  (`mod engine;` plus this re-export list, with `charset` either kept public on
+  purpose per D4 or re-exported). **That change is handed to C-017 explicitly**,
+  because C-017 freezes this surface and cannot freeze a rule the crate does not
+  yet satisfy. Until then this list is the intended surface, not a measured one.
+- `Engine` exposes state through accessors (`options()`, `buffer()`), never
+  through fields.
 - `Word`/`Letter`/`Mark` are public because C-001's acceptance is unit tests
   over the typed model and K-005's diff report benefits from pre-render state;
   they are not an invitation for adapters to manipulate the buffer directly.
@@ -183,11 +208,12 @@ pub struct Outcome {
   reads it). GoKey's loader therefore rewrites `false` on load and 1.0 ships no
   UI toggle. Per C-013's acceptance this is *persistence refused*, not new
   behaviour, and it is DL-013 (reproduce upstream) applied to a dead control.
-- C-007 is **re-scoped, not deleted**: `backlog.csv` now holds "Corpus coverage for
-  grammar repositioning (free_mark gate); no standalone feature" (R5, depends on
-  C-002, V-PARITY), and its acceptance already requires that no `vCheckGrammar`
-  option exists in `Options`. The gate itself is ported with C-002, ON by
-  default.
+- C-007 is **re-scoped, not deleted**: `backlog.csv` at `ec75ea7` holds "Corpus
+  coverage for grammar repositioning (free_mark gate); no standalone feature" (R5,
+  depends on C-002, V-PARITY), and its acceptance already requires that no
+  `vCheckGrammar` option exists in `Options`. That commit is not touched by this
+  PR, so the quoted row is not in this diff — it is on `main`. The gate itself is
+  ported with C-002, ON by default.
 
 ### D7 — R-API-5 and option placement: `Options` holds only what the engine reads
 
@@ -262,7 +288,10 @@ pub struct Outcome {
 **Cost**
 
 - C-005 grows: encoding at the edge plus round-trip tests per table.
-- `Edit` is no longer `Copy`, and the CLI and every adapter need a decode step.
+- Consequence of D4: `Edit` is (and stays) `Clone`, not `Copy` — it carries a
+  `String` in the encoded charset, so it could not be `Copy`. The real cost is the
+  decode step at the CLI and in every adapter, plus tests that compare whole edits
+  by value now comparing a `String` payload.
 - `Word` carries the overflow deque that `Vec<char>` hid.
 - Deleting `check_grammar` is a breaking API change, taken deliberately while
   C-017 has not frozen the surface and no external consumer exists.
@@ -285,11 +314,14 @@ pub struct Outcome {
 | C-002 | R5 (interim) | Port Telex with the `free_mark` gate (D6) and `hExt` assignment (D5); corpus cases for ext 1–4 and `free_mark` true/false |
 | C-005 | R4 | Implement D4; round-trip tests per charset table |
 | C-013 | R3 with Backend | Five default fixes, `check_grammar` → `free_mark`, loader refuses `free_mark=true`, `HostSettings` move of `send_key_step_by_step`, schema version |
-| C-017 | R2 | Freeze the D2 surface; add the CI dependency-direction check |
+| C-017 | R2 | Freeze the D2 surface **and make it true first**: privatise the four modules so the re-export list is the only path (`lib.rs`, D2). Gate `#![forbid(unsafe_code)]` and the absence of `cfg(target_os)` in core — `core-purity` already asserts the dependency closure, so do not build a second check for that |
 | AI-001 | R2 | Platform-side AI types with the caret-anchored `Suggestion`; ADR-0007 for selection/range-replace |
 | R1 (PM) | R1 | Flip DL-007 to Decided, linking this ADR, once the boundary review lands |
-| Boundary review | R3, R4 | Review D1–D10 against their lanes; record in the K-002 thread |
+| Boundary review | R6 (DevOps) | Review D1–D10 under DL-025; verdict recorded in this PR's thread |
 
 ## Amendment log
 
 - 2026-10-29 — initial version.
+- 2026-10-29 — R6 review (D1 enforcement, D1 cli dependency, D2 module privacy,
+  `Edit` `Copy`, acceptance cell) and R1 process review (ARCHITECTURE wording,
+  acceptance cell, `ec75ea7` citation). Text only; D3–D10 unchanged.
