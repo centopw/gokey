@@ -40,7 +40,51 @@ The adapter installs a `CGEventTap` with:
 | location | `kCGHIDEventTap` (0) | earliest point; also the only one where a synthetic self-test is indistinguishable from a real keystroke |
 | place | `kCGHeadInsertEventTap` (0) | our decision is made before any other tap's |
 | options | `kCGEventTapOptionDefault` (0), active | listen-only cannot swallow, and swallowing is the model |
-| mask | `kCGEventKeyDown` (`1 << 10`) | key-up carries no information the engine needs; the core takes `Phase` anyway |
+| mask | key-down, flags-changed and four mouse-down/drag types — **not** key-up | the engine's input is not only typing; the mask is upstream's, and the two groups the spike omitted carry a toggle and a reset (§1.1) |
+
+**§1.1 — The mask is the adapter's contract with upstream, and two thirds of it is not typing.**
+Upstream masks seven event types (`OpenKeyManager.m:45-51`): `kCGEventKeyDown`, `kCGEventKeyUp`,
+`kCGEventFlagsChanged`, `kCGEventLeftMouseDown`, `kCGEventRightMouseDown`, `kCGEventLeftMouseDragged`,
+`kCGEventRightMouseDragged`. The spike masked one. That is a behaviour gap, not a simplification,
+because the two missing groups carry engine input:
+
+- **`kCGEventFlagsChanged` (`1 << 12`) is where the language switch lives.** Modifier keys never
+  generate a key-down, so a modifier hotkey is invisible to a key-down-only tap: the toggle never
+  fires, and `_lastFlag` / `_hasJustUsedHotKey` never update. Upstream also uses the release branch
+  for the temporary switches — `vTempOffSpellChecking()` at `OpenKey.mm:653`, `vTempOffEngine()` at
+  `:656` — so a ⌘ or ⌃ tap-and-release is a behaviour, not a no-op. A single *unmodified* hotkey
+  still works through the key-down branch (`:615-633`), which is exactly why the gap reads as
+  complete in a smoke test.
+- **The four mouse types (`1 << 1`, `1 << 3`, `1 << 6`, `1 << 7`) start a new word.**
+  `OpenKey.mm:689` calls `RequestNewSession()`, which sends a `Mouse / MouseDown` event into the
+  engine (`:149`) and additionally clears `_syncKey` for VNI (`:151-153`). Without it, `a`, click,
+  `s` yields `á` where upstream yields `s` — a typing-behaviour difference with no corpus case, which
+  DL-013 forbids shipping. The set is exactly upstream's: `otherMouse*` is **not** masked, and adding
+  it would be as much a divergence as omitting these four.
+
+Key-up stays out. Upstream masks it (`1 << 11`) and then only reaches it in the type filter
+(`:664-666`); the one dispatch to the engine is `kCGEventKeyDown` (`:713`), so nothing reads a
+key-up. Excluding it costs no behaviour and one callback per keystroke.
+
+The mouse path is **engine input, not an adapter-side flush**. `Engine::reset()` exists
+(`crates/openkey-core/src/engine.rs:46`) and is documented as upstream `startNewSession`, but
+upstream's mouse handler does more: the `_syncKey` clear is table-specific (`OpenKey.mm:151-153`).
+Calling `reset()` from the adapter would collapse the two and lose half the behaviour. C-002 must
+therefore choose — a third `Phase` arm, a mouse discriminator on `KeyEvent`, or a dedicated session
+entry point — and because that changes the `openkey-core` API it needs its own ADR before MAC-002
+depends on it. This ADR deliberately does not decide it.
+
+**§1.2 — The location is a decision, not a description.** Upstream installs at
+`kCGSessionEventTap` (`OpenKeyManager.m:53`); this ADR takes `kCGHIDEventTap`. It is the earliest
+point, so a swallow there is final for every consumer downstream, including other input methods; a
+synthetic event posted at HID level is indistinguishable from hardware, which is what makes the
+self-test a fair test rather than a test of the session queue; and it is the location where an active
+tap's swallow semantics are unambiguous. The cost is on the permission side: an active tap needs
+Accessibility at either location, and HID-level listening may additionally require Input
+Monitoring on current macOS. That is one of the things the trusted run measures —
+`AXIsProcessTrusted()` printed next to `IOHIDCheckAccess(listen)` — and if HID turns out to need a
+second grant for no behavioural gain, the fallback is upstream's session location with nothing else
+changed: the mask, the dispatch and the guard are identical at both.
 
 Listen-only is not a fallback. A listen-only tap would let the physical key through *and* emit the
 converted character, producing `as` → `aá`. The tap is active or the IME is not running; there is no
@@ -48,8 +92,9 @@ configuration in which a partially working adapter is preferable to a visible "n
 
 ### 2. The adapter is Rust with raw FFI; there is no ObjC++ host
 
-17 `extern` declarations in three `unsafe extern "C"` blocks (44 lines including the three `#[link]`
-attributes) cover the whole platform surface: 10 from ApplicationServices, 6 from CoreFoundation,
+16 `extern` functions and one `extern static` (`kCFRunLoopDefaultMode`) in three
+`unsafe extern "C"` blocks (44 lines including the three `#[link]` attributes) cover the whole
+platform surface: 10 functions from ApplicationServices, 5 from CoreFoundation plus that static,
 1 from IOKit (`IOHIDCheckAccess`, used only for reporting trust state). Ten `unsafe` blocks, all in
 this one file. `key_from_macos` (62 lines) and `tap_callback` (47 lines) are the only logic that knows
 it is on macOS.
@@ -172,6 +217,10 @@ in this probe — which is exactly what the open verification below is for.
 - That swallowing and re-emission work end to end. The code path exists and the self-test injects at
   HID level, but the tap never installed.
 - Behaviour in a real app, in secure input mode, or with a stale trust record after a rebuild.
+- Anything about the six event types the probe did not mask. It watched key-down only, so none of
+  these runs say whether flags-changed or mouse events are delivered under trust. §1.1 comes from
+  upstream's mask and callback (`OpenKeyManager.m:45-51`, `OpenKey.mm:615-700`), not from the probe,
+  and it is the correction the probe's scope made necessary.
 
 ## Open verification: the trusted run
 
@@ -270,19 +319,24 @@ measured, visible product requirement rather than a surprise — see the first t
    `NULL` with no dialog and no error. Treating that as an ordinary error path produces the worst
    possible outcome: an IME that appears installed, appears enabled, and types plain ASCII. Startup
    must detect `NULL` and enter the denied state before it claims to be running.
-3. **The keycode table is adapter-owned and tested.** §4. Core stays layout-neutral; the gate that
+3. **The mask is upstream's, and two thirds of it is not typing.** §1.1. Flags-changed carries the
+   language toggle and both temporary switches; the four mouse types start a new word. A
+   key-down-only tap passes a smoke test and fails the first hotkey and the first mid-word click, in
+   that order of discovery. The callback dispatches on event type from the first commit, not after a
+   bug report.
+4. **The keycode table is adapter-owned and tested.** §4. Core stays layout-neutral; the gate that
    enforces it (`core-purity`) is the reason not to take the shortcut.
-4. **The `kCGEventSourceUserData` guard is load-bearing.** §5. It is the only thing that stops our
+5. **The `kCGEventSourceUserData` guard is load-bearing.** §5. It is the only thing that stops our
    own emission from being reprocessed, and the corruption it prevents is silent.
-5. **The Accessibility grant is per build until M2.** TCC keys the grant to the bundle identity,
+6. **The Accessibility grant is per build until M2.** TCC keys the grant to the bundle identity,
    signing identity and path, so an ad-hoc-signed rebuild is a new subject and the user re-grants.
    This is the dogfood cost ADR-0008 §2 already pays for the artefact job; it is the reason M2 brings
    the stable self-signed identity, and DL-022's rename window is the M3 re-grant.
-6. **The adapter must re-enable a tap the system disables.** `kCGEventTapDisabledByTimeout` and
+7. **The adapter must re-enable a tap the system disables.** `kCGEventTapDisabledByTimeout` and
    `…ByUserInput` arrive *as events* in the callback, not as errors. Ignoring them leaves an IME that
    worked minutes ago and now types plain English with no visible cause. MAC-002 owns this; it is
    listed here because an ADR that says "tap" and omits it would be describing a prototype.
-7. **Secure input is the one place we must be silent.** When a password field enables secure event
+8. **Secure input is the one place we must be silent.** When a password field enables secure event
    input, the system stops delivering key events to taps. That is the correct behaviour (and the
    suggestion overlay's secure-field rule assumes it), but it must be *verified* rather than assumed,
    and the engine buffer must be dropped on the transition so no stale composition leaks into the
@@ -295,11 +349,14 @@ measured, visible product requirement rather than a surprise — see the first t
 
 ## Follow-up tasks
 
-- **MAC-002** — the adapter: tap installation, `DisabledByTimeout`/`ByUserInput` recovery, proxy-form
-  emission, keycode table with per-row tests, trust-state machine emitting S-09's banner state.
+- **MAC-002** — the adapter: tap installation with the seven-type mask of §1.1 and dispatch on event
+  type (key-down → engine key event; flags-changed → toggle and temporary switches on release; mouse
+  down/drag → new session), `DisabledByTimeout`/`ByUserInput` recovery, proxy-form emission, keycode
+  table with per-row tests, trust-state machine emitting S-09's banner state.
 - **The trusted run** above, recorded back into this ADR. Blocks MAC-002's acceptance, not its start.
 - **C-002** — `Engine::apply`: the spike's stand-in is one call site and is deleted when the real
-  engine lands. No adapter change should be needed.
+  engine lands. Its mouse/session half is a core-API decision (§1.1) and needs its own ADR if it
+  changes `Phase` or `KeyEvent`; MAC-002 depends on there being an entry point, not on its shape.
 - **S-09 / S-08** — banner and menu-bar rendering of the three trust states (the UI half of
   consequence 1). Owned by the same lane.
 - **Secure-field verification** — one manual case: type in a password field, return to a text field,
