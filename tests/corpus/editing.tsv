@@ -1,0 +1,33 @@
+# Editing: word breaks, backspace, enter, tab, punctuation, digits.
+# id	method	options	input	expected
+edit-word-break	telex	-	aa\sa	â a
+edit-break-then-word	telex	-	aa\saas	â ấ
+edit-enter	telex	-	aa\n	â\n
+edit-tab	telex	-	aa\t	â\t
+edit-delete-glyph	telex	-	aa\b	-
+edit-delete-then-type	telex	-	vieejt\b	việ
+edit-digit	telex	-	aa1	â1
+edit-punct	telex	-	aa.	â.
+edit-english-plain	telex	-	hello	hello
+# An unbroken English word with a repeated `a` is not a no-op: typing the
+# second one two keys later re-marks the first vowel and drops what is between
+# them (banana -> bânna, cacao -> câco, mama -> mâm). Upstream 2.0.3 does the
+# same on macOS (DL-026). Recorded as the engine behaves, not as it ought to;
+# `tests/corpus/README.md` rule 2's `xfail:` ids need comparator support that
+# does not exist yet, so these are pinned as matches instead of silenced.
+edit-english-2	telex	-	banana	bânna
+edit-english-3	telex	-	cacao	câco
+edit-english-4	telex	-	mama	mâm
+edit-english-5	telex	-	naive	naive
+edit-cap-then-word	telex	-	Vieejt\scuar	Việt của
+# Any of these ends the word and is then inserted literally: the mark already
+# applied to the syllable stays (Engine.cpp's bracket/punctuation branches).
+edit-bracket	telex	-	aa(	â(
+edit-comma	telex	-	aa,	â,
+edit-quote	telex	-	aa'	â'
+edit-hyphen	telex	-	aa-	â-
+# A literal backslash is an ordinary character; `\\b` in the input column is
+# the two-character sequence, not a backspace. This is the case the judge could
+# not express before its expected column was decoded like the input column.
+edit-backslash	telex	-	aa\\b	â\\b
+edit-three-words	telex	-	aa\sbb\scc	â bb cc

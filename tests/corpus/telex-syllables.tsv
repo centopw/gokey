@@ -1,0 +1,28 @@
+# Common syllables, Telex, default options. Every row is an ordinary Vietnamese
+# word spelled correctly; the oracle decides whether the key sequence produces
+# it, so a failure here is a disagreement about the word itself.
+# id	method	options	input	expected
+nghieeng	telex	-	nghieeng	nghiêng
+chuyeenj	telex	-	chuyeenj	chuyện
+quyeenr	telex	-	quyeenr	quyển
+nghix	telex	-	nghix	nghĩ
+khuyeen	telex	-	khuyeen	khuyên
+quoocs	telex	-	quoocs	quốc
+hanhj	telex	-	hanhj	hạnh
+phucs	telex	-	phucs	phúc
+thuowr	telex	-	thuowr	thuở
+giuwax	telex	-	giuwax	giữa
+ngoaif	telex	-	ngoaif	ngoài
+nhuwngx	telex	-	nhuwngx	những
+cungx	telex	-	cungx	cũng
+ddax	telex	-	ddax	đã
+sex	telex	-	sex	sẽ
+raats	telex	-	raats	rất
+nhieeuf	telex	-	nhieeuf	nhiều
+lamf	telex	-	lamf	làm
+vieecj	telex	-	vieecj	việc
+hoom	telex	-	hoom	hôm
+yeeu	telex	-	yeeu	yêu
+ddax-se	telex	-	ddax\ssex	đã sẽ
+hoom-nay	telex	-	hoom\snay	hôm nay
+vieecj-lamf	telex	-	vieecj\slamf	việc làm

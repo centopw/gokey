@@ -1,0 +1,15 @@
+# Telex: the seven letter transformations, lower and upper case.
+# id	method	options	input	expected
+telex-aa	telex	-	aa	â
+telex-aw	telex	-	aw	ă
+telex-ee	telex	-	ee	ê
+telex-oo	telex	-	oo	ô
+telex-ow	telex	-	ow	ơ
+telex-uw	telex	-	uw	ư
+telex-dd	telex	-	dd	đ
+telex-uow	telex	-	uow	ươ
+telex-AA	telex	-	AA	Â
+telex-EE	telex	-	EE	Ê
+telex-OO	telex	-	OO	Ô
+telex-DD	telex	-	DD	Đ
+telex-Aa	telex	-	Aa	Â
