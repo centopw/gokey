@@ -508,7 +508,8 @@ Reported, not patched, because each belongs to a task ID:
    - Anyone re-creating the workspace needs this, or K-009 will fail the same way a second time.
    Owner: whoever owns the bootstrap commit.
 2. **`Options::check_grammar` has no upstream counterpart and defaults to the inverted behaviour**
-   (R-API-4). Worth catching before C-007.
+   (R-API-4). Decided in ADR-0002 D6: the field is deleted, `free_mark` replaces it, and C-007 is
+   dissolved.
 3. **`charset.rs` says the code tables live in `Engine.cpp`;** they are in `Vietnamese.cpp`
    (`:411-494`), and `getCharacterCode` is in `Engine.cpp:501`. Doc-only, but it will mislead C-005.
 4. **`openkey-core` crate is named after the upstream product** while DL-010 is unresolved and the
@@ -557,6 +558,9 @@ Recommendation, as a plan change for the sponsor rather than something I can set
 - Do **not** keep a field called `check_grammar`: it cannot be mapped to any upstream control, so no
   corpus case could ever be written against it.
 
+**Outcome (2026-10-29): accepted in full.** C-007 is dissolved; `check_grammar` is deleted and
+`free_mark` added with persistence refused — ADR-0002 D6.
+
 ### 7b. R5 accepted as interim — the risk this creates, stated plainly
 
 **Accepted, explicitly** (asked twice: PM seq=26 and seq=36). With R5 folded into R3, one agent holds
@@ -572,9 +576,10 @@ Two mitigations I will apply, and one I need from PM:
   corpus authoring lags behind.
 - Keep corpus authoring and replay as separate PRs (K-004, K-005), so a delay in one does not block
   review of the other.
-- **From PM:** name the hand-off condition now, not at M0 exit — e.g. *"if corpus v0 is not at 150
-  cases by <date>, QA is staffed"*. An interim role with no expiry is a permanent role that nobody
-  resourced.
+- **From PM:** name the hand-off condition now, not at M0 exit. **Answered (2026-10-29): three turns
+  on K-004** — if corpus v0 is still under 150 cases after three turns, QA (R5) is staffed full-time
+  and the interim owner hands over. Recorded in `PLAN.md` section 6 and expressed in turns, not
+  dates (DL-019). An interim role with no expiry is a permanent role that nobody resourced.
 
 The macOS-only rescope makes this somewhat cheaper: K-003/K-004/K-005 lose their cross-platform
 obligation for 1.0 (backlog defects PM logged in seq=44 — REL-001 depends on `MAC-007` only, REL-003
@@ -586,17 +591,17 @@ validated. The expiry condition is still the thing I need.
 
 ### 7d. AI seams — annotated, not implemented (sponsor direction, 2026-10-29)
 
-1.0 is macOS-only and ships **no** AI. `ARCHITECTURE.md` §11 defines the seams; this section only
+1.0 is macOS-only and ships **no** AI. `ARCHITECTURE.md` §10 defines the seams; this section only
 records where each one sits relative to the port, so that C-001/C-002 do not accidentally build a
 shape that the seam cannot attach to later. **No M0 or M1 task is created by this section.**
 
-| Seam (`ARCHITECTURE.md` §11) | Owner | Where it lives in the port | Binding rule |
+| Seam (`ARCHITECTURE.md` §10) | Owner | Where it lives in the port | Binding rule |
 |---|---|---|---|
 | Current word buffer | `openkey-core`, **read-only** | `Engine::word()` returning `&Word` — the same accessor C-001 needs for its own tests; replaces today's `Engine::buffer()` | Must never be an input to `apply`. It is an observer of state, not part of it. |
 | Caret position (`CaretRect`, `caret_rect()`) | `openkey-platform` | Adapter. Upstream has no equivalent symbol: the C engine never knows where the caret is | Core must not gain a caret field and `Edit` must not gain a caret field. If a caret value ever reaches `apply`, parity is unreproducible. |
-| Surrounding text (`TextContext { before_caret, app, secure }`) | `openkey-platform` (`AppId` already exists) | Adapter-side `ContextProvider`; `before_caret` bounded (512 chars in the doc) | `apply` may not accept `TextContext` at all — determinism boundary, §11 rule 3. |
+| Surrounding text (`TextContext { before_caret, app, secure }`) | `openkey-platform` (`AppId` already exists) | Adapter-side `ContextProvider`; `before_caret` bounded (512 chars in the doc) | `apply` may not accept `TextContext` at all — determinism boundary, §10.2 rule 3. |
 | Suggestion accept | `openkey-platform` → `emit` | Ordinary `Edit` through the existing emit path, one undo unit | Reinforces R-API-2: `Edit` must stay the single output channel. Do not carry suggestions on `Action` and do not overload the ext code (R-API-3). |
-| `openkey-ai` crate | post-1.0, never linked into 1.0 | Not in the workspace dependency graph | CI must fail if `openkey-core` depends on it (§11 rule 3). |
+| `openkey-ai` crate | post-1.0, never linked into 1.0 | Not in the workspace dependency graph | CI must fail if `openkey-core` depends on it (§10.2 rule 3). |
 
 **Why "read-only" is a correctness statement, not a preference.** If `Engine::apply` ever consulted
 context or caret, its output would depend on ambient application state, and the parity corpus would
