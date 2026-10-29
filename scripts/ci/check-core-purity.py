@@ -10,6 +10,13 @@ Scope: `crates/openkey-core/src`, excluding `#[cfg(test)]` items. Tests may read
 fixtures; banning `std::fs` there would either fail honest tests or push fixtures
 into inline string literals, which is worse than the thing being prevented.
 
+`use` statements are expanded to one fully-qualified path per line before
+matching. Matching raw lines misses the *idiomatic* form rustfmt produces:
+`use std::{fs, net};` contains neither `std::fs` nor `std::net`. Grouped, nested
+and aliased trees are all expanded, and a multi-line tree is joined first.
+`test_check_core_purity.py` pins these shapes — a scanner with a known bypass
+and no test regresses to the bypass.
+
 Exit status: 0 clean, 1 violation, 2 the gate could not run.
 """
 
@@ -31,7 +38,6 @@ BANNED_TOKENS = {
     "std::env": "process environment",
     "std::process": "process spawning",
     "std::thread": "threading",
-    "std::fs::": "filesystem I/O",
     "static mut": "process-global mutable state",
     "unsafe": "unsafe code",
 }
@@ -42,6 +48,64 @@ PLATFORM_CRATES = {
     "openkey-windows",
     "openkey-linux",
 }
+
+
+USE_START = re.compile(r"^\s*(?:pub(?:\s*\([^)]*\))?\s+)?use\b")
+USE_ALIAS = re.compile(r"^(?P<path>.+?)\s+as\s+[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _split_top_level(text: str, sep: str) -> list[str]:
+    """Split on `sep` outside `{}` groups."""
+    parts: list[str] = []
+    depth = 0
+    current = ""
+    i = 0
+    while i < len(text):
+        char = text[i]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+        if depth == 0 and text.startswith(sep, i):
+            parts.append(current)
+            current = ""
+            i += len(sep)
+            continue
+        current += char
+        i += 1
+    parts.append(current)
+    return [part.strip() for part in parts]
+
+
+def expand_use_tree(tree: str, prefix: str = "") -> list[str]:
+    """Expand one Rust `use` tree into fully-qualified leaf paths.
+
+    `std::{fs, net}` -> `["std::fs", "std::net"]`
+    `std::fs::{self, File}` -> `["std::fs", "std::fs::File"]`
+    `std::fs as f` -> `["std::fs"]`  (the alias is dropped, the path is not)
+    """
+    tree = " ".join(tree.split())
+    if not tree:
+        return []
+    if tree.startswith("{") and tree.endswith("}"):
+        leaves: list[str] = []
+        for part in _split_top_level(tree[1:-1], ","):
+            if part:
+                leaves.extend(expand_use_tree(part, prefix))
+        return leaves
+
+    accumulated = prefix
+    for raw in _split_top_level(tree, "::"):
+        part = raw.strip()
+        if part.startswith("{"):
+            return expand_use_tree(part, accumulated)
+        alias = USE_ALIAS.match(part)
+        if alias:
+            part = alias.group("path").strip()
+        if part == "self":
+            return [accumulated] if accumulated else []
+        accumulated = f"{accumulated}::{part}" if accumulated else part
+    return [accumulated] if accumulated else []
 
 
 def strip_cfg_test(source: str) -> list[tuple[int, str]]:
@@ -76,6 +140,46 @@ def strip_cfg_test(source: str) -> list[tuple[int, str]]:
     return out
 
 
+def logical_lines(source: str) -> list[tuple[int, str]]:
+    """Return (line_number, text) with every `use` tree expanded.
+
+    A multi-line `use` statement is joined first: rustfmt wraps long trees, and a
+    scan that reads one physical line at a time sees neither half.
+    """
+    physical = strip_cfg_test(source)
+    out: list[tuple[int, str]] = []
+    i = 0
+    while i < len(physical):
+        lineno, line = physical[i]
+        if USE_START.match(line):
+            statement = line
+            while ";" not in statement:
+                i += 1
+                if i >= len(physical):
+                    break  # unterminated: let the compiler report it
+                statement += " " + physical[i][1]
+            tree = USE_START.sub("", statement.split(";", 1)[0], count=1).strip()
+            for leaf in expand_use_tree(tree):
+                out.append((lineno, f"use {leaf};"))
+            i += 1
+            continue
+        out.append((lineno, line))
+        i += 1
+    return out
+
+
+def offending_tokens(line: str) -> list[str]:
+    """Banned tokens present in one logical line, ignoring comment-only lines."""
+    if line.strip().startswith("//"):
+        return []
+    found: list[str] = []
+    for token in BANNED_TOKENS:
+        pattern = r"\bunsafe\b" if token == "unsafe" else re.escape(token)
+        if re.search(pattern, line):
+            found.append(token)
+    return found
+
+
 def scan_sources() -> list[str]:
     problems: list[str] = []
     sources = sorted((CRATE / "src").rglob("*.rs"))
@@ -84,16 +188,12 @@ def scan_sources() -> list[str]:
         return problems
     for path in sources:
         rel = path.relative_to(ROOT)
-        for lineno, line in strip_cfg_test(path.read_text(encoding="utf-8")):
-            stripped = line.strip()
-            if stripped.startswith("//"):
-                continue
-            for token, why in BANNED_TOKENS.items():
-                pattern = r"\bunsafe\b" if token == "unsafe" else re.escape(token)
-                if re.search(pattern, line):
-                    problems.append(
-                        f"::error file={rel},line={lineno}::`{token}` in openkey-core ({why}): {stripped}"
-                    )
+        for lineno, line in logical_lines(path.read_text(encoding="utf-8")):
+            for token in offending_tokens(line):
+                problems.append(
+                    f"::error file={rel},line={lineno}::`{token}` in openkey-core "
+                    f"({BANNED_TOKENS[token]}): {line.strip()}"
+                )
     return problems
 
 

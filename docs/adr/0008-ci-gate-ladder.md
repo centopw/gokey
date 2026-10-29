@@ -39,7 +39,7 @@ than after a macOS build.
 |---|---|---|---|---|
 | G1 hygiene | `build-test` (fmt, clippy `-D warnings`) | ubuntu, macOS, windows | PR + main | yes |
 | G2 correctness | `build-test` (test, doctest, doc) | ubuntu, macOS, windows | PR + main | yes |
-| G3 parity | `parity` | ubuntu | PR + main | yes once `scripts/parity.sh` exists |
+| G3 parity | `parity` | ubuntu | PR + main | yes once corpus fixtures exist; every PR once `scripts/parity.sh` exists |
 | G4 supply chain | `licenses`, `secrets`, `sbom` | ubuntu | PR + main | yes |
 | G5 artefact | `package-macos` | macOS | main, and PRs touching packaging | yes |
 | G6 release | not in this ADR | — | tag | see §4 |
@@ -49,6 +49,15 @@ than after a macOS build.
 G1/G2 must run on all three OSes even though 1.0 ships on one. `openkey-core` is supposed to be
 free of platform keycodes and I/O; a crate that only compiles on macOS has already broken that
 rule, and the failure surfaces with a misleading error at M4.
+
+`parity` is the one gate whose blocking state changes on its own, and it changes on **evidence, not
+a date**. While there is neither a corpus nor `scripts/parity.sh`, there is nothing to compare and
+the job reports a notice. The moment corpus fixtures are committed without a harness to replay
+them, the job fails: fixtures plus no runner means parity is *unmeasured*, which is exactly the
+state K-005 exists to end. A calendar deadline was written first and removed — on its expiry date it
+would fail every PR in the repository at once, including ones that touched nothing related, and
+nobody re-reads a stale date in a workflow file. That is the same day-based planning DL-019 removed,
+in the place where it does the most damage.
 
 ### 2. G5 starts at M0, not M3
 
@@ -128,6 +137,18 @@ pipeline.
   asserting `cargo tree -p openkey-core` contains no platform crate. **`#[cfg(test)]` items are
   excluded** — a test may read a fixture, and banning `std::fs` there only pushes fixtures into
   inline string literals, which is worse.
+
+  The scan expands `use` trees to one fully-qualified path per line before matching, because
+  matching physical lines misses the shape rustfmt actually emits: `use std::{fs, net};` contains
+  neither `std::fs` nor `std::net`. Grouped, nested, aliased (`use std::fs as f`) and multi-line
+  trees are all expanded. The shapes are pinned by `scripts/ci/test_check_core_purity.py`, which
+  runs in the same job before the scan: a scanner with a known bypass and no test regresses to the
+  bypass, and its failure mode is a false pass, which is worse than a false alarm.
+
+  Scope is `crates/openkey-core/src`. A `build.rs` at the crate root would be out of scope, and
+  deliberately so: a build script runs at build time on the host and legitimately reads files, so
+  folding it into a source-purity rule would produce noise rather than evidence. `openkey-core`
+  has no build script today; if one is added, this paragraph is the thing to revisit.
 - **No network**: 1.0 ships inert AI seams. The workspace dependency graph may not contain
   `reqwest`, `hyper`, `ureq` or `tokio`, and `openkey-ai` — a workspace member from AI-002 (M1) —
   must not be reachable from `openkey-core`. The direction of that assertion is the whole claim: a
@@ -162,9 +183,10 @@ that is the only part made of process rather than code, and it is stated here so
   and nobody is meant to install them.
 - Pinning the toolchain means security updates to `stable` are manual. Accepted: a compiler change
   that lands unannounced in `main` costs more than a deliberate monthly bump.
-- The purity scanner is a text scan, not a compiler plugin. It can be defeated by aliasing
-  (`use std::fs as f`). It stops accidents and casual coupling; the real guarantees remain
-  `#![forbid(unsafe_code)]` and review.
+- The purity scanner is a text scan, not a compiler plugin. Expansion closes the grouped, nested,
+  aliased and multi-line `use` forms, but it still cannot see I/O reached through a macro body, a
+  helper crate, or a `build.rs`. It stops accidents and casual coupling; the real guarantees remain
+  `#![forbid(unsafe_code)]`, the dependency-closure assertion, and review.
 
 ## Alternatives considered
 
@@ -178,3 +200,11 @@ that is the only part made of process rather than code, and it is stated here so
 4. **Weakening `deny.toml` with `allow-wildcard-paths`** to make the licence job green. Rejected in
    PR #3: the wildcard rule was right and the manifest was wrong.
 5. **Publishing `release.yml` now, disabled.** Rejected in §4.
+6. **A calendar deadline for the parity harness** (`PARITY_REQUIRED_FROM`). Rejected after review:
+   a date cannot tell "nothing to compare yet" from "comparison silently skipped", it fails every
+   unrelated PR on expiry, and it contradicts DL-019's turn-based planning. Replaced by the
+   fixtures-without-harness trigger in §1.
+7. **Matching banned tokens against raw source lines.** Rejected after review: it misses
+   `use std::{fs, net};`, which is the form rustfmt produces for two imports from one root, so the
+   gate would pass on the first idiomatic line of I/O anyone wrote. Replaced by use-tree expansion
+   plus the scanner's own tests.

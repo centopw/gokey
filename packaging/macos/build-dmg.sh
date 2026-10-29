@@ -138,6 +138,7 @@ echo "==> hdiutil create $DMG"
 hdiutil create -quiet -volname "$DISPLAY_NAME" -srcfolder "$STAGE" -fs HFS+ -format UDZO -ov "$DMG"
 hdiutil verify "$DMG"
 codesign --force --sign - --timestamp=none "$DMG"
+codesign --verify --strict --verbose=2 "$DMG"
 
 # Assert the artefact, not just its existence: a dmg that mounts but lacks the app
 # or the licence files is the failure mode this job exists to catch.
@@ -172,6 +173,15 @@ fi
 actual_display="$(plutil -extract CFBundleDisplayName raw "$MOUNT/$APP_NAME.app/Contents/Info.plist" 2>/dev/null || echo "")"
 if [ "$actual_display" != "$DISPLAY_NAME" ]; then
     echo "::error::CFBundleDisplayName is '$actual_display', expected '$DISPLAY_NAME' (DL-022)"
+    status=1
+fi
+
+# Verify the copy the user actually receives. The check above proves the staging
+# bundle; a mount, a copy or a re-pack that dropped the signature would still pass it.
+if codesign --verify --strict --verbose=2 "$MOUNT/$APP_NAME.app" 2>&1 | sed 's/^/    /'; then
+    echo "    ok  mounted bundle signature verifies"
+else
+    echo "::error::the bundle inside the dmg does not verify: signature lost between signing and packaging"
     status=1
 fi
 

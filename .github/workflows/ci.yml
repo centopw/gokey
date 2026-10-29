@@ -67,6 +67,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable channel
         with:
           toolchain: ${{ env.RUST_VERSION }}
+      - name: Unit-test the gate before trusting it
+        # The scanner's dangerous failure is a silent pass, so its own tests run
+        # first. stdlib only: no pytest dependency on a gate that must not break.
+        run: python3 -m unittest discover -s scripts/ci -p 'test_*.py' -v
       - name: openkey-core has no I/O, no globals, no unsafe, no platform crate
         run: python3 scripts/ci/check-core-purity.py
 
@@ -135,11 +139,11 @@ jobs:
   parity:
     name: parity
     # The reference C++ engine builds headless on Linux, so parity needs no macOS
-    # runner. Until scripts/parity.sh exists (K-005) this job warns, and it starts
-    # failing on its own after the expiry date instead of warning forever.
+    # runner. The trigger is evidence, not a date (DL-019): the gate is green while
+    # there is nothing to compare, and becomes blocking the moment corpus fixtures
+    # exist without a harness to replay them. A calendar deadline here fails every
+    # PR in the repo at once, including ones that touched nothing related.
     runs-on: ubuntu-24.04
-    env:
-      PARITY_REQUIRED_FROM: "2026-11-15"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable channel
@@ -153,8 +157,10 @@ jobs:
             ./scripts/parity.sh
             exit 0
           fi
-          if [[ "$(date -u +%Y-%m-%d)" > "$PARITY_REQUIRED_FROM" ]]; then
-            echo "::error::scripts/parity.sh is still missing after $PARITY_REQUIRED_FROM (K-005); parity is unmeasured"
+          fixtures="$(git ls-files | grep -Ei '(^|/)corpus/' | grep -v -E '(^|/)README\.md$' || true)"
+          if [ -n "$fixtures" ]; then
+            echo "::error::corpus fixtures exist but scripts/parity.sh does not (K-005): parity is unmeasured, not pending"
+            printf '%s\n' "$fixtures" | head -10
             exit 1
           fi
-          echo "::warning::parity harness not present yet (K-003 / K-004 / K-005); gate becomes blocking on $PARITY_REQUIRED_FROM"
+          echo "::notice::no corpus fixtures and no harness yet (K-003 / K-004 / K-005): parity has nothing to compare"
