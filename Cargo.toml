@@ -18,8 +18,11 @@ repository = "https://github.com/centopw/gokey"
 authors = ["OpenKey contributors", "Port of OpenKey by Mai Vu Tuyen (GPL-3.0)"]
 
 [workspace.dependencies]
-openkey-core = { path = "crates/openkey-core" }
-openkey-platform = { path = "crates/openkey-platform" }
+# `version` alongside `path`: `dep.workspace = true` inherits the version requirement, and a
+# path-only spec resolves to `*`, which `deny.toml`'s `bans.wildcards = "deny"` rejects
+# (pre-existing red on `licenses` since c64f8d6). Keep these two lines together.
+openkey-core = { version = "0.1.0", path = "crates/openkey-core" }
+openkey-platform = { version = "0.1.0", path = "crates/openkey-platform" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
