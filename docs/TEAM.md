@@ -21,7 +21,7 @@ unit of work is the **turn** (DL-019), not a fraction of a week.
 | R3 | Core engineer — engine | 1.0 | M0 | State machines, Unicode, careful transliteration of C++ | Telex/VNI/Simple Telex, spelling, options logic |
 | R4 | Core engineer — data | 1.0 | M0 | Tables, encoding, serde, data-driven tests | Charsets, macros, convert tool, settings/migration |
 | R5 | QA / parity engineer | 1.0 | M0 | Test harness engineering, fuzzing, differential testing | Reference harness, corpus, compat matrices |
-| R6 | Build and release engineer | 0.75 | M0 | CI, cross-compilation, signing, notarisation, installers | Pipelines, artifacts, signing keys process |
+| R6 | Build and release engineer | 0.75 | M0 | CI, cross-compilation, ad-hoc signing and universal builds, installers | Pipelines, artifacts, signing process |
 | R7 | macOS platform engineer (interim: the FE lane holds R7 from M0 until a dedicated macOS engineer is staffed — K-008 produced a working FFI prototype, see DL-004) | 1.0 | M0 | Objective-C/Swift + Rust FFI, CGEventTap or InputMethodKit | macOS adapter, menu bar, packaging |
 | R8 | Windows platform engineer | 1.0 | M4 (post-1.0) | Win32, `windows-rs`, hooks, SendInput, MSI | Windows adapter, tray, installer |
 | R9 | Linux platform engineer | 1.0 | M5 (post-1.0) | C ABI, IBus or Fcitx5, Wayland behaviour, distro packaging | Linux IBus engine, packaging |
@@ -97,7 +97,8 @@ R = responsible, A = accountable, C = consulted, I = informed.
 4. Read the upstream C++ file(s) for your area; note surprises in the issue tracker.
 5. Claim one task from `backlog.csv` in your milestone; open a draft PR early.
 6. For platform roles: get a reference machine image with the OS versions in
-   the charter, plus a signing/notarisation account request into R6.
+   the charter, plus confirmation from R6 that no signing account is needed
+   (ad-hoc signing, DL-027).
 
 ## 7. Decision rights
 

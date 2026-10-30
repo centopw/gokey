@@ -69,9 +69,9 @@ in the place where it does the most damage.
 
 ### 2. The artefact gate starts at M0, not M3
 
-`K-007`'s acceptance is "artifacts produced; time-to-artifact documented". That is an artefact job,
+`K-007`'s acceptance is "ad-hoc signed dmg produced in CI; time-to-artifact documented". That is an artefact job,
 so the gate and the task are the same thing. Deferring the artefact gate to M2 would have made the
-first dmg appear at the same moment it had to be notarised, meaning the bundle layout, `Info.plist`,
+first dmg appear at the same moment it was planned to be notarised, meaning the bundle layout, `Info.plist`,
 the InputMethodKit install path and any `install_name_tool` work would get their first exercise
 inside a release.
 
@@ -80,8 +80,27 @@ GitHub Release, no notarisation, no external link, nobody is expected to install
 
 Ad-hoc only (`codesign -s -`) until M2, for one specific reason: it needs **no secret**, so the job
 works on fork PRs and no signing material exists in the organisation before it is needed. At M2 the
-committed self-signed identity arrives (stable CDHash across rebuilds, so dogfooders keep their
-Accessibility grant); at M3 Developer ID + notarisation + stapling replace it.
+committed self-signed identity arrives (a designated requirement that names the certificate rather
+than the build's cdhash, so dogfooders keep their Accessibility grant across rebuilds).
+
+**Corrected 2026-10-30:** this paragraph used to end "at M3 Developer ID + notarisation + stapling
+replace it". That path is closed for 1.0 — the sponsor has no paid Apple Developer Program
+membership and does not want an App Store submission, so there is no Developer ID certificate and
+ad-hoc builds cannot be notarised (D1, D2; DL-027). The dmg this workflow ships stays ad-hoc, and
+the CI gate never notarised, so the gate itself is unchanged. Two things follow that the earlier
+draft got for free: the committed self-signed identity at M2 is **not** a Developer ID and is
+unaffected by D1, so it remains the mechanism that keeps an Accessibility grant across rebuilds;
+and Gatekeeper will stop every new user once, which makes the bypass part of the release notes and
+the download page rather than a support article (DL-027, RK-23).
+
+That parenthetical originally read "stable CDHash across rebuilds", which is backwards: the cdhash
+changes on every rebuild — that is the problem — and the *designated requirement* is what stays
+fixed. Measured on the PR #19 dmg: ad-hoc gives `designated => cdhash H"aefda1b8…" or
+cdhash H"eaf8e860…"`, and a re-signed rebuild produces a different pair, while the same rebuild
+signed with a throwaway self-signed certificate keeps `identifier "com.centopw.gokey" and
+certificate leaf = H"2cb1022…"` even as the binary hash moves. The signature side is measured;
+whether the Accessibility grant is keyed to it is inferred, so MAC-006 and G2 carry the test rather
+than this ADR asserting the outcome.
 
 Three properties keep this from becoming a green-by-absence job:
 
@@ -116,9 +135,18 @@ exercised is untested automation, and it would sit for four milestones accumulat
 about notarisation, stapling and asset naming that nobody can validate.
 
 The signed-release workflow at M3 is small and is written when it can be run against a real tag.
-What belongs here, now, is the prerequisite list (see `M0-CI-gates-and-three-OS-packaging.md` §4):
+What belonged here, at the time, was the prerequisite list (see `M0-CI-gates-and-three-OS-packaging.md` §4):
 Developer ID Application certificate, Apple org enrolment started in W2, protected `v*` tags, a
 `release` environment with required reviewers, and the notarisation/stapling commands.
+
+**Superseded on 2026-10-30** by DL-027, DL-029 and DL-031. Of that list, only the protected `v*`
+tags exist, and only for deletion and update: `release-tags-immutable` covers `refs/tags/v*` with a
+tag target, empty bypass and the deletion, update and non-fast-forward rules. There is no
+certificate, no enrolment, no environment, no notarisation and no stapling; `release.yml` is being
+written for the ad-hoc universal path instead, with no secrets at all, and the ADR for it records
+that release authority is recorded only in the account's security log and on the release page rather
+than by an approval. A paid membership would restore
+the original list, not this one.
 
 ### 5. Runner and toolchain pinning
 
