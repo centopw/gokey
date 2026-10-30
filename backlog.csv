@@ -5,7 +5,7 @@ K-003,P0,M0,Parity,Headless reference build of the C++ engine with normalized ke
 K-004,P0,M0,Parity,"Parity corpus v0 from README, CHANGELOG and common Vietnamese words",R5,K-003,2,V-PARITY,At least 300 cases; reviewed by R11
 K-005,P0,M0,Parity,"Corpus loader, replay command and diff report in openkey-cli",R5,K-003;K-004,2,V-PARITY,One command reports pass/fail/diff per case
 K-006,P0,M0,Compliance,"LICENSE, NOTICE, GPL attribution, upstream contact",R13,-,2,V-LINT,NOTICE present; upstream author contacted; contact logged
-K-007,P0,M0,Bootstrap,Packaging spike: unsigned macOS app bundle and dmg built in CI,R6,K-001,2,V-BUILD;V-MAC,macOS app bundle and dmg produced in CI; time-to-artifact documented (MSI delegated to WIN-005 at M4; deb/rpm to LNX-004 at M5)
+K-007,P0,M0,Bootstrap,Packaging spike: ad-hoc signed macOS app bundle and dmg built in CI,R6,K-001,2,V-BUILD;V-MAC,Ad-hoc signed macOS dmg produced in CI (arm64 at M0; universal arm64+x86_64 from MAC-006 per DL-030); time-to-artifact documented; MSI delegated to WIN-005 at M4 and deb/rpm to LNX-004 at M5
 K-008,P0,M0,macOS,"Spike: CGEventTap vs InputMethodKit, timebox three turns",R7,K-002,3,V-MAC,Prototype types into TextEdit; ADR-0004 recommendation
 K-009,P0,M0,Program,"Kickoff: confirm scope, staffing and platform order with sponsor",R1,-,1,V-DOC,Charter approved; DL-003 decided; roster committed
 AI-001,P1,M1,AI-Readiness,"Add ContextProvider, CaretRect and caret-anchored Suggestion types to openkey-platform (inert)",R2,C-001;C-017,1,V-AI,Traits compile on all targets; capability flags default false; no behaviour change
@@ -34,7 +34,7 @@ MAC-002,P2,M2,macOS,"Edit emission: batched and per-key, backspace plus Unicode"
 MAC-003,P2,M2,macOS,Focus tracking and per-application mode and charset memory,R7,MAC-001,2,V-MAC,Mode flips on app switch as configured
 MAC-004,P2,M2,macOS,"Menu bar item, global enable hotkey, state indicator",R7,MAC-001,2,V-MAC,Toggle works globally; state visible
 MAC-005,P2,M2,macOS,Settings window bound to core Options,R10,MAC-004,3,V-MAC,All options persist and apply live
-MAC-006,P2,M2,macOS,"Universal binary, codesign, notarisation, dmg",R6,MAC-002,3,V-MAC,Notarized dmg installs on a clean macOS 13+ machine
+MAC-006,P2,M2,macOS,"Universal binary, ad-hoc codesign, documented Gatekeeper bypass, dmg",R6,MAC-002,3,V-MAC,Ad-hoc signed universal dmg installs on a clean macOS 13+ machine after the documented Gatekeeper bypass; bypass steps in the release notes and on the download page; an update installed over the previous build keeps the Accessibility grant (otherwise the ADR-0008 §2 self-signed identity ships before M2 closes); notarisation is a conditional follow-up (DL-027)
 MAC-007,P2,M2,Quality,Dogfood period and macOS compatibility matrix,R5,MAC-002,3,V-MAC,Two weeks dogfooded; matrix green or documented exceptions
 REL-001,P3,M3,Release,External beta program and triage process,R1,MAC-007,2,V-REL,At least 20 external testers on macOS; triage SLA defined
 REL-002,P3,M3,Release,Opt-in crash reporting with no keystroke content,R12,MAC-006,3,V-SEC,Payload reviewed; privacy statement published

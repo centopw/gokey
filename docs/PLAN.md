@@ -28,8 +28,8 @@ actual turns spent.
 | --- | --- | --- | --- |
 | **M0 Bootstrap** | 20 | Repo, CI, reference harness, corpus v0, ADRs, adapter spike, licensing | G0: builds on 3 OSes; ref harness replays a script; >=300 corpus cases; macOS adapter decision; LICENSE/NOTICE in repo; charter approved |
 | **M1 Core parity** | 51 | Port Telex, VNI, Simple Telex, charsets, spelling/grammar, macros, smart switch, convert, options; define AI seams with a caret-anchored span | G1: >=99.5% agreement on >=2000 cases, 100% documented examples; core p99 <= 0.5 ms; API frozen; zero `unsafe` in core; context/suggestion traits compile with no AI dependency |
-| **M2 macOS alpha** | 24 | Event tap adapter, focus tracking, menu bar, settings, notarised dmg | G2: installs on a clean macOS 13+ machine; >=1,000 dogfood sessions; compat matrix documented |
-| **M3 macOS 1.0** | 21 | Hardening, external beta, auto-update, docs, release | G3: 1.0.0 published for macOS; crash-free >=99.9% over 1,000 dogfood sessions; security sign-off; zero network calls outside the update check |
+| **M2 macOS alpha** | 24 | Event tap adapter, focus tracking, menu bar, settings, ad-hoc signed universal dmg (DL-027, DL-030) | G2: installs on a clean macOS 13+ machine after the documented Gatekeeper bypass; an update installed over the previous build keeps the Accessibility grant; >=1,000 dogfood sessions; compat matrix documented |
+| **M3 macOS 1.0** | 21 | Hardening, external beta, auto-update, docs, dmg download release (DL-027) | G3: 1.0.0 published for macOS and installable from the download page after the documented Gatekeeper bypass; crash-free >=99.9% over 1,000 dogfood sessions; security sign-off; zero network calls outside the update check |
 | **M4 Windows** | 21 | Hook capture, SendInput emission, tray + dialog, signed MSI | G4: signed installer; compat matrix (Office, browsers, IDEs, terminals); no AV false positive on the reference set |
 | **M5 Linux** | 18 | IBus engine, preedit strategy, packaging, desktop matrix | G5: types Vietnamese in GTK and Qt apps on GNOME and KDE; deb + rpm install cleanly on Ubuntu 24.04 and Fedora |
 | **M6 AI assist** | 49 | Inline correction (caret-anchored span, Tab/Esc), suggestion overlay, ghost completion, next-word prediction, evaluation, privacy gate | G6: correction precision >=95% with dismissal behaviour measured; completion acceptance rate measured; privacy review passed; no core or keystroke-path dependency |
@@ -109,7 +109,27 @@ Every milestone ends with a scripted demo on a clean machine:
 
 A milestone without a demo is not complete.
 
-## 8. Out of scope for this plan
+## 8. Release path
+
+Fixed by the sponsor on 2026-10-30 (DL-027 to DL-032). 1.0 ships as a **dmg downloaded from a
+GitHub Release**: ad-hoc signed, universal arm64 + x86_64, not notarised, not in the App Store.
+There is no paid Apple Developer Program membership, so there is no Developer ID certificate and
+nothing to notarise with.
+
+Three consequences the gates and documents carry rather than imply:
+
+- **The user performs one Gatekeeper bypass.** Its exact steps are a release-checklist item,
+  written on the download page and in the release notes.
+- **No approval gate exists on a release.** One identity authors, reviews and publishes; release
+  authority is recorded only in the account's security log and on the release page (DL-029). The
+  checks in `release.yml` are assertions, not approvals.
+- **The OS verifies nothing.** `SHA256SUMS` is a convenience; integrity rests on public GPL-3.0
+  source and a tag that names its commit.
+
+A paid membership appearing reopens DL-027 and adds a notarised variant of MAC-006; it does not
+change this plan quietly.
+
+## 9. Out of scope for this plan
 
 Windows and Linux implementations (M4, M5), AI features (M6), and the v2
 integration candidates (TSF, Fcitx5) are post-1.0. They must not enter M0–M3
