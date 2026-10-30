@@ -145,11 +145,8 @@ under `git`, so a version change that makes the two agree — either way — sto
 difference from being assumed, and the ADR's reason for the rule-level form has to be re-measured
 rather than inherited.
 
-Two guards in the suite are worth naming because both failures it prevents actually occurred during
-development and both produced a confident, meaningless "0 findings":
-
-Two guards in the suite are worth naming because both failures it prevents actually occurred during
-development and both produced a confident, meaningless "0 findings":
+Three guards in the suite are worth naming, because each one prevents a failure that produced a
+confident, meaningless result during development:
 
 1. **The control column is asserted first and exactly.** gitleaks' generic detector is
    entropy-filtered: `ghp_AAAA…` and `a1b2c3d4…`-repeated-four-times read as zero findings in *every*
