@@ -4,6 +4,8 @@
 stub .app. This release proves the download, install and licence path; it says nothing
 about the input method. MAC-002 replaces the payload.
 
+Requires macOS 13 or later. The dmg is universal: Apple silicon and Intel.
+
 ## macOS will refuse it once. That is expected.
 
 This build is **ad-hoc signed and not notarised**. There is no paid Apple Developer
@@ -11,13 +13,20 @@ Program membership behind it, so macOS has no identity to vouch for the build an
 Gatekeeper rejects the first launch. Nothing is wrong with the download.
 
 1. Open the dmg and drag **GoKey.app** into **Applications**.
-2. In Applications, **right-click (or Control-click) > Open**, then **Open** in the
-   dialog. A double-click will not work: the first dialog has no Open button.
-3. After that it opens normally.
+2. The first launch will be blocked. Approve it once:
+   - **macOS 15 or later:** launch GoKey, let it be blocked, then open **System Settings >
+     Privacy & Security**, scroll to **Security**, and choose **Open Anyway**. Confirm with
+     your password or Touch ID. The old right-click shortcut is gone on these versions.
+   - **macOS 13 or 14:** in Applications, **right-click (or Control-click) GoKey.app > Open**,
+     then **Open** in the dialog. A double-click will not work: that dialog has no Open button.
+3. It opens normally from then on.
 
-Or drop the quarantine flag:
+Or skip the dialogs and drop the quarantine flag:
 
     xattr -dr com.apple.quarantine /Applications/GoKey.app
+
+Never turn Gatekeeper off system-wide for this. The one-time approval above is the whole
+bypass, and it applies only to this app.
 
 ## Verify the download
 

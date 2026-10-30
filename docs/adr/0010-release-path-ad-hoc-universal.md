@@ -116,24 +116,30 @@ support, and the download page says so in its first sentence. Removing `--prerel
 requires MAC-002 (the real InputMethodKit payload) plus an amendment to this ADR — it is a
 product-scope change, not a workflow flag.
 
-### 6. Release authority is the audit log
+### 6. Release authority is the security log, not an approval
 
 With a single shared identity there is no approval gate. `centopw` can create a tag, and a
-tag runs the release. D4's rulesets restrict tag creation, but the same admin account can
-adjust them, and there is no separate approver to require. Anything in this repository,
-including a workflow comment, that implies a human approved a specific release is wrong.
-The record is the GitHub audit log (tag creation, workflow run, release publication) and
-the release page itself.
+tag runs the release. D4's rulesets cannot change that: `release-tags-immutable` stops any
+push from deleting or moving a `v*` tag, but its empty bypass list means a `creation` rule
+would lock the only identity out of its own release, so tag creation stays open. Nor is there
+a separate approver to require. Anything in this repository, including a workflow comment,
+that implies a human approved a specific release is wrong.
+
+The durable record is the release page and the workflow run, plus `centopw`'s personal
+security log — read in the UI, bounded retention, no API, because the account is a User rather
+than an organisation and there is no organisation audit log to query. It is tamper-evident,
+not tamper-proof: the same admin account could edit the ruleset.
 
 This is the honest version of D3. It is also why the ADR names its own supersession
 conditions rather than pretending the gap does not exist.
 
 ## Consequences
 
-- **Every user must clear Gatekeeper once.** Right-click → Open, or
-  `xattr -dr com.apple.quarantine /Applications/GoKey.app`. The instructions are generated
-  into the release notes from `.github/release-notes.md.in`, so they cannot drift from the
-  build that shipped.
+- **Every user must clear Gatekeeper once,** and the route depends on the version: System
+  Settings → Privacy & Security → Open Anyway on macOS 15 and later, Control-click → Open on
+  13–14, or `xattr -dr com.apple.quarantine /Applications/GoKey.app` on any of them. The
+  instructions are generated into the release notes from `.github/release-notes.md.in`, so they
+  cannot drift from the build that shipped.
 - **No revocation and no notarisation ticket.** The integrity anchor is the SHA-256 in the
   release plus TLS on the download. `SHA256SUMS` tells a user whether their download
   matches *this* release; it says nothing about whether the release is trustworthy, and it
