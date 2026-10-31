@@ -1,0 +1,18 @@
+# Simple Telex 2 reads `w` as `ư`; Simple Telex 1 leaves it as a letter. Every
+# row below is an input where the pinned driver returns a different document
+# under simple_telex_1, so the file tests what mode 2 actually changes -- not the
+# mode-2 spelling of a mode-1 case (DL-026).
+# id	method	options	input	expected
+simple2-w	simple_telex_2	-	w	ư
+simple2-wa	simple_telex_2	-	wa	ưa
+simple2-wo	simple_telex_2	-	wo	ưo
+simple2-wos	simple_telex_2	-	wos	ứo
+simple2-wn	simple_telex_2	-	wn	ưn
+simple2-wng	simple_telex_2	-	wng	ưng
+simple2-wow	simple_telex_2	-	wow	ươ
+simple2-wows	simple_telex_2	-	wows	ướ
+simple2-wowf	simple_telex_2	-	wowf	ườ
+simple2-wowcj	simple_telex_2	-	wowcj	ược
+simple2-wowng	simple_telex_2	-	wowng	ương
+simple2-twow	simple_telex_2	-	twow	tươ
+simple2-ww	simple_telex_2	-	ww	w

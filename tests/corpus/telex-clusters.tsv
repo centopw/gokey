@@ -1,0 +1,18 @@
+# Vowel clusters: two-letter forms that become one glyph, and three-letter forms that stay two.
+# id	method	options	input	expected
+cl-iee	telex	-	iee	iê
+cl-ye	telex	-	yee	yê
+cl-uoo	telex	-	uoo	uô
+cl-uois	telex	-	uois	uói
+cl-uou	telex	-	uouw	ươu
+cl-uye	telex	-	uyee	uyê
+cl-oa	telex	-	oas	óa
+cl-oe	telex	-	oes	óe
+cl-uo	telex	-	uos	úo
+cl-ieu	telex	-	ieeus	iếu
+cl-yeu	telex	-	yeeus	yếu
+cl-uoc	telex	-	uowcs	ước
+cl-oac	telex	-	oacs	oác
+cl-oen	telex	-	oens	oén
+cl-uong	telex	-	uoongs	uống
+cl-oai	telex	-	oais	oái
