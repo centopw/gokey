@@ -138,6 +138,9 @@ Event loop per platform (all adapters own their native run loop; core is unaware
 | Permission | Accessibility (TCC) | none, but AV/signing risk | none; must be installed as IME |
 | Integration | menu bar item (NSStatusItem) | tray icon + Win32 dialog | IBus engine + GNOME/KDE settings |
 
+Permission flow (the three trust states, the banner copy, the deep link and
+re-checking without a restart): `docs/macos-permissions.md`.
+
 Linux note: because the engine is embedded in the IME, "backspace technique"
 becomes preedit manipulation plus commit. This is a behavioural adapter concern
 (ADR-0006), not an engine change.
