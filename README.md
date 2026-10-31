@@ -89,6 +89,7 @@ for the first green build.
 | `docs/WORKFLOW.md` | Branching, review, CI gates, cadence, verification recipes, release checklist |
 | `docs/RISKS.md` | Risk register with owners and triggers |
 | `docs/DECISIONS.md` | Decision log, open items blocking milestones |
+| `docs/macos-permissions.md` | Accessibility permission flow, trust states, capture verification |
 | `backlog.csv` | 69 tasks with owners, dependencies, turn estimates and verification recipes |
 | `tests/corpus/README.md` | Parity corpus format and review rules |
 
