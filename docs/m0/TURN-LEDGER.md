@@ -72,7 +72,7 @@ inside another row (K-007 in T2), and one shipped its artefacts with no turn row
 at all (K-006). The three that remain open — K-004, K-005, K-008 — are the three
 the milestone's gate actually reads: a 300-case corpus, a replay command, and an
 adapter decision with a trusted run behind it. On turns, though, M0 is already
-overspent: **7 task turns and 31 unbudgeted ones, 38 of 20**, with 5 more of task
+overspent: **7 task turns and 40 unbudgeted ones, 47 of 20**, with 5 more of task
 estimate still outstanding (§4.1(a)).
 
 ## 3. Turns drawn from other milestones during M0
@@ -99,7 +99,7 @@ It is one of the verdicts in §4 U9, which is where every review turn now sits.
 | U5 | Merging the backlog: #9, #6, #8 onto refreshed heads, plus the gate-naming audit that found `PLAN.md`'s `G6` | R1 | 1 | Merge and audit work; the audit is what made #13 necessary |
 | U7 | #13 authoring: DL-026, the DL-013 form, PG-01…PG-03, the evidence-grep rule, then three factual repairs after `REQUEST CHANGES` | R1 | 1 | Governance and decision recording |
 | U8 | #10 branch refresh after `main` moved and the branch fell behind | FE | 1 | Author work on its own PR; not a verdict, so U9 does not price it |
-| U9 | **Review verdicts by non-authoring lanes — one turn per `VERDICT:` review.** R1: #1 ×2, #8 ×2, #10 ×2, #14 ×1. R6: #2, #5 ×2, #6 ×2, #9 ×2, #11 ×2, #13 ×2. R2: #3, #4 ×2. R10: #3 | R1 7, R6 11, R2 3, R10 1 | 22 | DL-021 made review a recorded artefact with a cost; nothing budgets it. Counted from the API, not from memory (command in §4.1(c)) |
+| U9 | **Review verdicts by non-authoring lanes — one turn per distinct `VERDICT:` review.** R1: #1 ×2, #8 ×2, #10 ×2, #14, #17 re-pin. R6: #2, #5 ×2, #6 ×2, #9 ×2, #11 ×2, #13 ×2, #15 ×3 (5 posted), #16 ×2. R2: #3, #4 ×2, #17 ×3. R10: #3 | R1 8, R6 16, R2 6, R10 1 | 31 | DL-021 made review a recorded artefact with a cost; nothing budgets it. 33 posted, 31 distinct; the only collapse is #15's identical APPROVE posted three times on `4a10c64`. Counted from the API, not from memory (command in §4.1(c)) |
 
 U4 and U6 held the #1 and #14 reviews; both are now inside U9 so that one rule
 prices them. The identifiers were not renumbered, so references to this file from
@@ -112,38 +112,53 @@ T4 *and* in U1 — is counted once.
 
 | Lane | Task turns | Unbudgeted — non-review | Review verdicts (U9) | Total |
 |---|---|---|---|---|
-| R1 PM | 1 (K-009 kickoff) | 7 (U1 3, U2 1, U3 1, U5 1, U7 1) | 7 | **15** |
-| R2 Backend | 3 (T3, T6, T7) | 1 (U2) | 3 | **7** |
-| R6 DevOps | 2 (T1, T2) | 0 | 11 | **13** |
+| R1 PM | 1 (K-009 kickoff) | 7 (U1 3, U2 1, U3 1, U5 1, U7 1) | 8 | **16** |
+| R2 Backend | 3 (T3, T6, T7) | 1 (U2) | 6 | **10** |
+| R6 DevOps | 2 (T1, T2) | 0 | 16 | **18** |
 | FE | 1 (T8) | 1 (U8) | 0 | **2** |
 | R10 | 0 | 0 | 1 | **1** |
-| **Total** | **7** | **9** | **22** | **38 of 20** |
+| **Total** | **7** | **9** | **31** | **47 of 20** |
+
+The review column is **distinct verdicts**: 33 were posted and 31 count, because
+#15's APPROVE was posted three times on `4a10c64` with an identical body and one
+verdict is one turn. Raw and distinct are printed as separate columns by the
+command in §4.1(c), so the total is on one basis. The 31 is #1–#17: #1–#14 22,
+#15 3, #16 2, #17 4. #18–#20 are outside this line; §4.1(c) lists their verdicts
+and why.
+
+**Not in the 47: the author turns of #15, #16 and #17** — three merges, all with
+review records. They are named rather than priced because #16 and #17 continue
+K-003 and K-001 past their estimates and #15 re-opens the ledger: whether each is a
+new turn or a second charge to a row already spent is an estimate question, and the
+estimate is the sponsor's. Counted as turns, the total is 50. Counting their
+reviews but not their authoring would be the silent omission this file exists to
+prevent, so the three are on the record even though the headline leaves them out.
 
 Every column is checkable. Task turns come from §1 plus K-009's recorded decisions;
 the merges in U1 and U3 are in `git log` on `main`. Review turns come from one API
 call per PR (§4.1(c)) and are exact — the arithmetic is "count the lines beginning
-`VERDICT:`". The nine non-review unbudgeted turns are R1's count of working rounds
-and are ±1 each; that is 24% of the total, so a mistake there moves the headline by
-at most one.
+`VERDICT:`", then drop byte-identical reposts. The nine non-review unbudgeted turns
+are R1's count of working rounds and are ±1 each; that is 19% of the total, so a
+mistake there moves the headline by at most one.
 
 Remaining task estimate: K-004 1 (122 cases) + K-005 2 + K-008 2 = 5, against
-**−18 turns of budget left**. K-006's 2 estimated turns are unrecorded and are not
-counted here. If they cost their estimate, the totals become 40 and the projection 45.
+**−27 turns of budget left**. K-006's 2 estimated turns are unrecorded and are not
+counted here. If they cost their estimate, the totals become 49 and the projection 54.
 
-M0 is **eighteen turns over budget with a third of its task estimate still
-unspent**, and the projection is 43 of 20 before the fix reserve is considered — 45
+M0 is **twenty-seven turns over budget with a third of its task estimate still
+unspent**, and the projection is 52 of 20 before the fix reserve is considered — 54
 if K-006 cost its estimate. The first revision of this file put the same milestone
-at 24 turns. The fourteen-turn difference is U9's 22 review turns, less the eight
+at 24 turns. The twenty-three-turn difference is U9's 31 review turns, less the eight
 that U4, U6, U8 and U1 already carried (2 + 1 + 3 + 2), plus K-009's turn, which the
 first revision never counted, less the one turn #6 was counted twice for.
-**The plan priced delivery and never priced review.** Twenty-two of the 38 turns are
+**The plan priced delivery and never priced review.** Thirty-one of the 47 turns are
 a lane reading another lane's work. They were never free — DL-021 is what made them
 *recorded*, and a record can be counted. The tasks themselves were estimated at 17
 and are running at 7 spent plus 5 outstanding, close to plan.
 
-The distribution matters more than the total. R1 carries 15 of 38 (39%), R6 13
-(34%), R2 7, FE 2, R10 1. My own lane is the largest single spender, and its seven
-non-review turns are the ones a K-010 row would have covered.
+The distribution matters more than the total. R1 carries 16 of 47 (34%), R6 18
+(38%), R2 10, FE 2, R10 1. R6's lane is now the largest single spender, and my own
+lane's seven non-review turns are the ones a K-010 row would have covered.
 
 **(b) Parity corpus against the 300-case gate**
 
@@ -163,43 +178,64 @@ K-005 has spent nothing.
 
 **(c) PRs merged without a recorded verdict**
 
-**Zero of twelve, as of `cda601b`.** Merged PRs: #1, #2, #3, #4, #5, #6, #8, #9,
-#10, #11, #13, #14. Test applied: at least one review whose body begins
-`VERDICT:`, per DL-021 — audited with a command rather than recalled, one API
-call per PR:
+**Zero of fifteen, as of #17.** Every merged PR in #1–#17 (#7 and #12 never
+merged) carries at least one review whose body begins `VERDICT:`, per DL-021 —
+audited with one API call per PR. The command prints `posted/distinct`; distinct
+drops only a byte-identical repost of the same verdict on the same commit:
 
-```
-for n in $(gh pr list --state merged --limit 30 --json number -q '.[].number' | sort -n); do
-  gh api repos/centopw/gokey/pulls/$n/reviews --jq \
-    '[.[] | select(.body | test("^VERDICT:"))] | length'
+```bash
+for n in $(seq 1 20); do
+  gh api "repos/centopw/gokey/pulls/$n/reviews" --paginate --jq \
+    '[.[] | select(.body | test("^VERDICT:"))] | "\(length)\t\([.[] | "\(.commit_id)|\(.state)|\(.body)"] | unique | length)"'
 done
-→ #1 2, #2 1, #3 2, #4 2, #5 2, #6 2, #8 2, #9 2, #10 2, #11 2, #13 2, #14 1
 ```
 
-No unverdicted merges to name. The distribution is worth reading too, and the
-first revision read it wrong: it said "four PRs needed two rounds" and then listed
-five. The correct count, straight from the same command, is **nine repair rounds**
-— nine of the twelve merged PRs published a `REQUEST CHANGES` and then an `APPROVE`:
+→ `#1 2/2  #2 1/1  #3 2/2  #4 2/2  #5 2/2  #6 2/2  #7 0/0  #8 2/2  #9 2/2`
+`#10 2/2  #11 2/2  #12 0/0  #13 2/2  #14 1/1  #15 5/3  #16 2/2  #17 4/4`
+`#18 0/0  #19 4/4  #20 0/0`
+
+**#1–#17: 33 posted, 31 distinct — the review line in §4.1(a).** #15 is the only
+gap between the columns: the `APPROVE` at `4a10c64` was posted three times
+(12:36:39Z, 12:37:43Z, 12:45:50Z) with the same body, and one verdict is one turn.
+#3 is 2/2 because its two reviews are two lanes on one commit (`fe95333c`), not a
+repost: FE/R10 signed at 08:56 and R2 at 09:05.
+
+**Two of the twenty merged PRs carry no review record. #18 and #20 have two
+`VERDICT:` lines each as issue comments, not reviews** — `gh api
+repos/centopw/gokey/issues/{18,20}/comments` returns 2 each; the reviews endpoint
+returns 0. DL-021's record is a `COMMENTED` review, so those four verdicts are not
+review turns under this ledger's rule, for the same reason PM's comment on #6 is
+not. Recorded at §6 item 8 rather than priced.
+
+#19 is the release-path merge (REL-001) and sits outside the #1–#17 line: four
+verdicts, four distinct under the same command (RC 08:18:32Z, its superseding
+`APPROVE` 08:19:29Z, and two re-pin verdicts 02:46:19Z and 02:49:48Z). It is listed
+here so the boundary is visible, not added to the 47.
+
+The distribution is worth reading too, and the first revision read it wrong: it
+said "four PRs needed two rounds" and then listed five. The correct count, straight
+from the same command, is **twelve of the fifteen merged PRs published a
+`REQUEST CHANGES` before an `APPROVE`**:
 
 | Reviewer lane | PRs where it blocked and then approved | Rounds |
 |---|---|---|
 | R1 | #1, #8, #10 | 3 |
-| R6 | #5, #6, #9, #11, #13 | 5 |
-| R2 | #4 | 1 |
+| R6 | #5, #6, #9, #11, #13, #15 ×2, #16 | 8 |
+| R2 | #4, #17 | 2 |
 
 #3 is the one multi-review PR that is **not** a repair round: R2 approved at 08:52
 without a `VERDICT:` line, R10 issued the signed verdict at 08:56, and R2 signed
 again at 09:05 — two lanes agreeing, nobody blocking. #2 and #14 were approved on
-first review. That is nine of twelve PRs requiring a repair cycle, which is the
-substantive finding: the first review catches something three times in four, and
-the review cost is a delivery cost, not a review-team luxury.
+first review. That is twelve of fifteen merged PRs requiring a repair cycle, which
+is the substantive finding: the first review catches something four times in five,
+and the review cost is a delivery cost, not a review-team luxury.
 
 **Proposal to the sponsor, not applied by me.** One backlog row,
 `K-010 Process governance and planning artefacts — R1, M0–M3, no fixed estimate`,
 with turns charged to the milestone in which they occur and reported at each gate
 checkpoint. I am not adding it: it changes the M0 estimate, and the estimate is
 the sponsor's. The case for it is no longer the 10 turns of the first revision —
-it is 31, against 7 of task spend, and the reserve it is eating is 3 turns.
+it is 40, against 7 of task spend, and the reserve it is eating is 3 turns.
 
 ## 5. Merge records — DL-021 and DL-025
 
@@ -221,6 +257,9 @@ a non-authoring lane may issue it under the compensating control in DL-025.
 | #11 | R2 | R6 `REQUEST CHANGES` 10:16:28Z → `APPROVE` 10:23:46Z at `0dbf995` | Yes | Clause (a) and (b): R6 re-probed all four comparator paths and re-ran both recipes rather than reading the author's report |
 | #13 | R1 | R6 `REQUEST CHANGES` at `24aed64` → `APPROVE` at `6f98328` | Yes | n/a — docs; three factual repairs, each re-verified by the reviewer from the primary source |
 | #14 | R2 | R1 `APPROVE` at `32df864` | Yes | Clause (a): both recipes run by the reviewer, 178 rows audited for duplicates and no-ops, the strongest upstream claim re-derived from `Engine.cpp` |
+| #15 | R1 | R6 `REQUEST CHANGES` 10:47:45Z on `03732b9` → `REQUEST CHANGES` 11:02:23Z on `2c1d223` → `APPROVE` 12:36:39Z on `4a10c64` | Yes | n/a — docs; R6 re-derived the ledger's arithmetic from the API and the repo rather than reading it, and returned two rounds of findings |
+| #16 | R2 | R6 `REQUEST CHANGES` 10:49:36Z on `edb0d192` → `APPROVE` 10:59:34Z on `51efbcb` | Yes | Clause (a): R6 ran the recipes itself and found `secrets` red on the reviewed head; the repair was verified by re-running the gate, not by reading the fix |
+| #17 | R6 | R2 `REQUEST CHANGES` 21:57:32Z on `fbb8e51` → `APPROVE` 07:44:15Z on `fbd5589` → `APPROVE` 07:47:52Z on `63e25b9`; R1 `APPROVE` 02:48:20Z at `6d96762` after `main` moved | Yes | Clause (a): R2 re-measured the gitleaks `dir`/`git` behaviour and challenged the row rather than accepting it; R1 re-ran the diff-identity check for the re-pin |
 
 The compensating control in DL-025 requires R1 to record it here. That is what
 the last column is for; when a verdict relies on it, the row says which clause
@@ -261,5 +300,12 @@ satisfied and how.
    was counted twice, once as task spend (T4) and once in U1. R6 caught it by
    adding the rows up rather than by reading them. The rule at the top of this file
    is the fix — one turn per signed verdict, counted from the API, applied to every
-   lane — and it moves the milestone from 24 to 38. The failure is the one in item
+   lane — and it moves the milestone from 24 to 38 at that revision, to 47 once
+   #15–#17's verdicts are counted (§4 U9). The failure is the one in item
    6: a plausible number, from a check applied unevenly.
+8. **#18 and #20 carry verdicts as issue comments, not reviews.** Each has two
+   `VERDICT:` lines on its issue timeline and zero on its review timeline. They are
+   real verdicts from the lanes that issued them, but DL-021's record is a
+   `COMMENTED` review, so §4.1(c) records both merges as having no review record and
+   U9 does not price those four lines. The fix is the form, not the rule: the same
+   body posted as a review on the next PR is a record.
