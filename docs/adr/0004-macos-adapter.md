@@ -86,18 +86,28 @@ Monitoring on current macOS. That is one of the things the trusted run measures 
 second grant for no behavioural gain, the fallback is upstream's session location with nothing else
 changed: the mask, the dispatch and the guard are identical at both.
 
+The SDK header still says what the permission checks cannot. `CGEvent.h:269-270` states that a tap
+may be placed at `kCGHIDEventTap` only by a process running as root, and that `NULL` is returned for
+other users; the Accessibility and Input Monitoring grants are the supported route past that
+requirement. `CGEvent.h:273-279` adds the second fact that shapes the acceptance test: when the tap
+is not permitted to monitor key events, the relevant mask bits are cleared at creation, and `NULL`
+is returned only if that leaves an empty mask. A non-`NULL` tap therefore does **not** prove that
+keystrokes are being seen — the trusted run's typed sentence does, with `key_events` as the
+observable.
+
 Listen-only is not a fallback. A listen-only tap would let the physical key through *and* emit the
 converted character, producing `as` → `aá`. The tap is active or the IME is not running; there is no
 configuration in which a partially working adapter is preferable to a visible "not permitted" state.
 
 ### 2. The adapter is Rust with raw FFI; there is no ObjC++ host
 
-16 `extern` functions and one `extern static` (`kCFRunLoopDefaultMode`) in three
-`unsafe extern "C"` blocks (44 lines including the three `#[link]` attributes) cover the whole
-platform surface: 10 functions from ApplicationServices, 5 from CoreFoundation plus that static,
-1 from IOKit (`IOHIDCheckAccess`, used only for reporting trust state). Ten `unsafe` blocks, all in
-this one file. `key_from_macos` (62 lines) and `tap_callback` (47 lines) are the only logic that knows
-it is on macOS.
+13 `extern` functions and one `extern static` (`kCFRunLoopDefaultMode`) in three
+`unsafe extern "C"` blocks cover the whole platform surface: 6 functions from ApplicationServices,
+6 from CoreFoundation plus that static, and 1 from IOKit (`IOHIDCheckAccess`, used only for
+reporting trust state). Counted at `d56b160` with
+`awk '/^mod ffi/,/^}/' crates/openkey-macos/src/tap.rs | grep -cE 'pub fn'` (13) and the same range
+with `pub static` (1). All of the FFI lives in this one file; `key_from_keycode` and the callback are
+the only logic that knows it is on macOS.
 
 An ObjC++ host exists upstream because the UI is ObjC++ — not because the tap needs it. Keeping the
 adapter in Rust means the callback, the keycode table and the engine call are in the same language as
@@ -135,8 +145,10 @@ like an engine bug.
 
 ### 5. The `kCGEventSourceUserData` guard is load-bearing
 
-Every synthetic event we create is stamped with `kCGEventSourceUserData = 0x4B303038` ("K008") and
-the callback returns such events untouched before it reads anything else:
+Every synthetic event we create is stamped with `kCGEventSourceUserData = 0x474B3031` ("GK01")
+and the callback returns such events untouched before it reads anything else. (The spike used
+`0x4B303038` "K008"; the adapter's value is `capture::ECHO_MAGIC` and is what the guard must keep in
+one place.)
 
 ```rust
 if CGEventGetIntegerValueField(event, FIELD_USER_DATA) == MAGIC {
