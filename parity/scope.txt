@@ -40,3 +40,7 @@ block: opt file:tests/corpus/options.tsv,file:tests/corpus/options-combos.tsv
 # are judged and at least 99.5% agree with the oracle — never by narrowing this
 # block.
 active: telex
+
+# C-006 activates `edit`: the editing, editing-sequences and spelling-boundaries
+# files are judged from here on. `telex` and the three later blocks are untouched.
+active: edit

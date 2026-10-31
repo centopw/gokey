@@ -8,6 +8,14 @@ sp-on-hoc	telex	spelling	hocj	học
 sp-restore-asdf	telex	restore-if-wrong-spelling	asdf	ádf
 sp-restore-viet	telex	restore-if-wrong-spelling	vieejt	việt
 sp-restore-hi	telex	restore-if-wrong-spelling	hij	hị
+# sp-restore-break: a break key runs checkRestoreIfWrongSpelling with vRestoreAndStartNewSession
+#   (Engine.cpp:1335-1341); the invalid `asd` word is replaced by its raw keys, then `.` passes through.
+sp-restore-break	telex	restore-if-wrong-spelling	asd.	asd.
+# sp-restore-space: the space branch forces the check and restores with vRestore (Engine.cpp:1384-1397);
+#   the raw word is followed by the literal space.
+sp-restore-space	telex	restore-if-wrong-spelling	asd\s	asd 
+# sp-restore-off: the flag-off control; with restore disabled the marked word is kept and the space passes.
+sp-restore-off	telex	-	asd\s	ád 
 sp-temp-off	telex	temp-off-spelling	vieejt	việt
 sp-temp-off-asdf	telex	temp-off-spelling	asdf	ádf
 sp-zfwj-zas-off	telex	-	zas	zas
