@@ -4,13 +4,25 @@
 #
 # This is a SPIKE BUNDLE, not the shipping product: the executable it wraps is the
 # headless `openkey` CLI. What it exercises is the part that always breaks late —
-# bundle layout, Info.plist, the codesign flag path, and hdiutil. MAC-006 replaces
-# the payload with the InputMethodKit bundle and the ad-hoc signature with
-# Developer ID + notarisation (DL-022 freezes the identifier and the .app filename,
-# so neither of those changes at M3).
+# bundle layout, Info.plist, the codesign flag path, and hdiutil.
+#
+# The ad-hoc signature is the *shipping* signature, not a placeholder (ADR-0010,
+# D1/D2 2026-10-30: no paid Apple Developer Program, so there is no Developer ID
+# certificate and Apple accepts no submission). MAC-006 replaces the payload with
+# the InputMethodKit bundle; the signature only changes if a paid account appears,
+# which is an ADR change. DL-022 freezes the identifier and the .app filename, so
+# neither step renames anything.
 #
 # Usage:
 #   build-dmg.sh --binary <path> --out <dir> [--version X.Y.Z] [--build N]
+#                [--tag vX.Y.Z] [--toolchain STRING] [--offer-out <file>]
+#
+#   --tag         the release tag this build belongs to; written into SOURCE-OFFER.txt
+#                 with the commit, and required to match --version (a semver pre-release
+#                 suffix such as -alpha.1 is allowed). Omit for an untagged CI build.
+#   --toolchain   the Rust version used, as a string (e.g. "rustc 1.99.0 (abc 2026-09-28)").
+#                 Defaults to `rustc --version`, so a rebuild instruction names a toolchain.
+#   --offer-out   also write SOURCE-OFFER.txt here, for upload next to the dmg.
 #
 # Environment overrides: APP_NAME, DISPLAY_NAME, BUNDLE_ID, MIN_MACOS, COPYRIGHT.
 set -euo pipefail
@@ -21,13 +33,19 @@ BINARY=""
 OUT_DIR=""
 SHORT_VERSION="0.1.0"
 BUILD_VERSION=""
+TAG=""
+TOOLCHAIN=""
+OFFER_OUT=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --binary) BINARY="${2:?}"; shift 2 ;;
         --out) OUT_DIR="${2:?}"; shift 2 ;;
         --version) SHORT_VERSION="${2:?}"; shift 2 ;;
         --build) BUILD_VERSION="${2:?}"; shift 2 ;;
-        -h|--help) sed -n '2,20p' "${BASH_SOURCE[0]}"; exit 0 ;;
+        --tag) TAG="${2:?}"; shift 2 ;;
+        --toolchain) TOOLCHAIN="${2:?}"; shift 2 ;;
+        --offer-out) OFFER_OUT="${2:?}"; shift 2 ;;
+        -h|--help) awk 'NR > 1 && /^set -euo/{exit} NR > 1' "${BASH_SOURCE[0]}"; exit 0 ;;
         *) echo "unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -35,6 +53,24 @@ done
 [ -n "$BINARY" ] || { echo "--binary is required" >&2; exit 2; }
 [ -f "$BINARY" ] || { echo "binary not found: $BINARY" >&2; exit 2; }
 [ -n "$OUT_DIR" ] || { echo "--out is required" >&2; exit 2; }
+
+# The tag and the version are two spellings of one claim; refuse to publish a build
+# where they disagree, because SOURCE-OFFER.txt is a legal document and not a log.
+# The version itself stays numeric (CFBundleShortVersionString is period-separated
+# integers), so a semver pre-release tag like v0.1.0-alpha.1 is tagged from 0.1.0.
+if [ -n "$TAG" ]; then
+    case "$TAG" in
+        "v$SHORT_VERSION"|"v$SHORT_VERSION"-*) ;;
+        *)
+            echo "--tag $TAG does not match --version $SHORT_VERSION" >&2
+            exit 2
+            ;;
+    esac
+fi
+
+if [ -z "$TOOLCHAIN" ]; then
+    TOOLCHAIN="$(rustc --version 2>/dev/null || echo unknown)"
+fi
 
 # Frozen literals for 1.0 (DL-022). Changing any of these invalidates the
 # Accessibility grant of every existing user, so they are not build knobs —
@@ -99,26 +135,58 @@ install -m 0644 "$ROOT/NOTICE.md" "$APP/Contents/Resources/NOTICE.md"
 
 COMMIT="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo "${GITHUB_SHA:-unknown}")"
 REMOTE="$(git -C "$ROOT" config --get remote.origin.url 2>/dev/null || echo "https://github.com/centopw/gokey")"
+ARCHS="$(lipo -archs "$BINARY" 2>/dev/null || echo unknown)"
+
+# What a reader needs to reproduce this download, in order of how they would look for it:
+# which release, which commit, which machine it runs on, which compiler built it.
+if [ -n "$TAG" ]; then
+    TAG_LINE="$TAG"
+    CHECKOUT_REF="$TAG"
+    RELEASE_URL="${REMOTE%.git}/releases/tag/$TAG"
+else
+    TAG_LINE="(none - untagged CI build)"
+    CHECKOUT_REF="$COMMIT"
+    RELEASE_URL="(none - untagged CI build)"
+fi
+
+if [ "$(printf '%s' "$ARCHS" | wc -w | tr -d ' ')" -gt 1 ]; then
+    REBUILD="  cargo build --release --locked -p openkey-cli --target aarch64-apple-darwin
+  cargo build --release --locked -p openkey-cli --target x86_64-apple-darwin
+  lipo -create -output openkey target/aarch64-apple-darwin/release/openkey target/x86_64-apple-darwin/release/openkey"
+else
+    REBUILD="  cargo build --release --locked -p openkey-cli"
+fi
+
 cat > "$APP/Contents/Resources/SOURCE-OFFER.txt" <<EOF
 Corresponding source for this build
 ===================================
 
-Application:  $DISPLAY_NAME ($APP_NAME.app)
-Version:      $SHORT_VERSION ($BUILD_VERSION)
-Commit:       $COMMIT
-Repository:   $REMOTE
+Application:    $DISPLAY_NAME ($APP_NAME.app)
+Version:        $SHORT_VERSION ($BUILD_VERSION)
+Tag:            $TAG_LINE
+Commit:         $COMMIT
+Architectures:  $ARCHS
+Toolchain:      $TOOLCHAIN
+Repository:     $REMOTE
 Source archive: ${REMOTE%.git}/archive/$COMMIT.tar.gz
+Release:        $RELEASE_URL
 
 This program is free software under the GNU General Public License version 3.
 The complete licence text is in LICENSE.txt next to this file.
 
-Built from the commit above with no local modifications outside that commit.
-To rebuild this exact version: git checkout $COMMIT && cargo build --release --locked
+Built from the revision named above with no local modifications outside it.
+To rebuild this exact version:
+  git checkout $CHECKOUT_REF
+$REBUILD
 
 Upstream: OpenKey (https://github.com/tuyenvm/OpenKey) by Mai Vu Tuyen, GPL-3.0.
 This project is a modified port of the upstream engine, not an official OpenKey
 build, and is not endorsed by the upstream authors.
 EOF
+
+if [ -n "$OFFER_OUT" ]; then
+    install -m 0644 "$APP/Contents/Resources/SOURCE-OFFER.txt" "$OFFER_OUT"
+fi
 
 # Copy the licence files to the top level of the disk image too: a user who
 # opens the dmg before installing should not have to mount the bundle to find them.

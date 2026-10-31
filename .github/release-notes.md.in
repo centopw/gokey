@@ -1,0 +1,54 @@
+# GoKey @TAG@ - pre-release
+
+**This build does not type Vietnamese.** The payload is the headless engine CLI inside a
+stub .app. This release proves the download, install and licence path; it says nothing
+about the input method. MAC-002 replaces the payload.
+
+Requires macOS 13 or later. The dmg is universal: Apple silicon and Intel.
+
+## macOS will refuse it once. That is expected.
+
+This build is **ad-hoc signed and not notarised**. There is no paid Apple Developer
+Program membership behind it, so macOS has no identity to vouch for the build and
+Gatekeeper rejects the first launch. Nothing is wrong with the download.
+
+1. Open the dmg and drag **GoKey.app** into **Applications**.
+2. The first launch will be blocked. Approve it once:
+   - **macOS 15 or later:** launch GoKey, let it be blocked, then open **System Settings >
+     Privacy & Security**, scroll to **Security**, and choose **Open Anyway**. Confirm with
+     your password or Touch ID. The old right-click shortcut is gone on these versions.
+   - **macOS 13 or 14:** in Applications, **right-click (or Control-click) GoKey.app > Open**,
+     then **Open** in the dialog. A double-click will not work: that dialog has no Open button.
+3. It opens normally from then on.
+
+Or skip the dialogs and drop the quarantine flag:
+
+    xattr -dr com.apple.quarantine /Applications/GoKey.app
+
+Never turn Gatekeeper off system-wide for this. The one-time approval above is the whole
+bypass, and it applies only to this app.
+
+## Verify the download
+
+    shasum -a 256 -c SHA256SUMS
+
+| file | what it is |
+| --- | --- |
+| GoKey-@VERSION@-@BUILD@.dmg | ad-hoc signed, universal (arm64 + x86_64) |
+| source.tar.gz | corresponding source, `git archive` of @TAG@ |
+| SHA256SUMS | checksums for the two files above |
+| LICENSE.txt, NOTICE.md | GPL-3.0 licence and upstream attribution |
+| SOURCE-OFFER.txt | where the source for this exact build lives |
+
+## Provenance
+
+- tag @TAG@ (@TAG_TYPE@) -> commit @SHA@, an ancestor of main
+- main at build time: @MAIN_TIP@
+- built with @TOOLCHAIN@ on macos-15
+- `spctl` rejects both the dmg and the app; CI asserts that rather than skipping it
+
+## Licence
+
+GPL-3.0-only. A modified port of OpenKey by Mai Vu Tuyen - not an official OpenKey build
+and not endorsed by the upstream authors. Corresponding source is source.tar.gz above and
+the URL in SOURCE-OFFER.txt.
