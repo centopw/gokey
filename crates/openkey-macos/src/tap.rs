@@ -31,7 +31,7 @@ use std::time::{Duration, Instant};
 
 use openkey_core::{Engine, Options};
 
-use crate::capture::{self, NativeEvent};
+use crate::capture::{self, DisableReason, NativeEvent};
 use crate::engine_host::{EngineHost, Reaction};
 use crate::trust::{ACCESSIBILITY_PANE_URL, Access, AccessReport, TrustState};
 
@@ -53,6 +53,14 @@ const OPTION_LISTEN_ONLY: u32 = 1;
 /// scalar for every Vietnamese letter; eight units leaves room for a surrogate
 /// pair and a combining sequence without allocating in the callback.
 const UNICODE_UNITS: usize = 8;
+
+/// `kIOHIDRequestTypePostEvent`: the first member of `IOHIDRequestType`, so 0.
+/// The enum has no explicit values, so the numbers are positional
+/// (`IOKit.framework/Headers/hidsystem/IOHIDLib.h:162-165`).
+pub const IOHID_REQUEST_POST: u32 = 0;
+/// `kIOHIDRequestTypeListenEvent`: the second member of the same enum, so 1
+/// (`IOHIDLib.h:162-165`).
+pub const IOHID_REQUEST_LISTEN: u32 = 1;
 
 mod ffi {
     use std::ffi::c_void;
@@ -105,7 +113,9 @@ mod ffi {
 
     #[link(name = "IOKit", kind = "framework")]
     unsafe extern "C" {
-        /// `kIOHIDRequestTypePostEvent` = 1, `kIOHIDRequestTypeListenEvent` = 2.
+        /// Takes a `kIOHIDRequestType`: pass [`super::IOHID_REQUEST_POST`] or
+        /// [`super::IOHID_REQUEST_LISTEN`], never a literal. A value outside the
+        /// enum is undefined behaviour in the framework, not an error return.
         pub fn IOHIDCheckAccess(request: u32) -> u32;
     }
 }
@@ -120,8 +130,8 @@ pub fn access_report() -> AccessReport {
     unsafe {
         AccessReport {
             accessibility: ffi::AXIsProcessTrusted() != 0,
-            hid_post: Access::from_raw(ffi::IOHIDCheckAccess(1)),
-            hid_listen: Access::from_raw(ffi::IOHIDCheckAccess(2)),
+            hid_post: Access::from_raw(ffi::IOHIDCheckAccess(IOHID_REQUEST_POST)),
+            hid_listen: Access::from_raw(ffi::IOHIDCheckAccess(IOHID_REQUEST_LISTEN)),
         }
     }
 }
@@ -193,7 +203,10 @@ impl std::error::Error for TapError {}
 /// Counters for the probe, the acceptance run and the menu bar.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Stats {
-    /// Events the tap delivered, after the echo guard.
+    /// Input events the tap delivered and the adapter decided, after the echo
+    /// guard. Disable notices and NULL deliveries are **not** included: they
+    /// are counted in `disabled_notices` and `null_events` instead. This is what
+    /// makes `captured - passed` the swallow count rather than a mixture.
     pub captured: u64,
     pub key_events: u64,
     pub flags_events: u64,
@@ -205,6 +218,10 @@ pub struct Stats {
     pub echoes: u64,
     pub disabled_notices: u64,
     pub recoveries: u64,
+    /// Callbacks whose event pointer was NULL. The system may deliver disable
+    /// notices that way; anything else is a delivery we could not read and must
+    /// not be reported as a swallow.
+    pub null_events: u64,
     pub engine_faults: u64,
 }
 
@@ -237,6 +254,13 @@ impl EventTap {
     /// Returns `Err` when the system refuses, and `NotTrusted` is classified
     /// from the actual answers rather than from a pre-check — see the module
     /// documentation.
+    ///
+    /// **A non-NULL return does not prove interception.** `CGEvent.h:272-279`
+    /// says mask bits for event types the process may not monitor are cleared
+    /// when the tap is created, and `NULL` is returned only if that leaves the
+    /// mask empty. A tap that keeps, say, only the mouse bits is still
+    /// non-NULL. The observable that proves keys are seen is
+    /// [`Stats::key_events`] rising while the user types, not this `Ok`.
     pub fn install(config: TapConfig) -> Result<Self, TapError> {
         let report = access_report();
         let adapter = Box::into_raw(Box::new(Adapter {
@@ -384,13 +408,27 @@ unsafe fn read_native(kind: u32, event: *mut c_void) -> NativeEvent {
     }
 }
 
+/// Re-enable the tap after the system disabled it, and say why. Called from the
+/// callback for both reasons `CGEventTap` documents.
+fn recover_from_disable(adapter: &mut Adapter, reason: DisableReason) {
+    adapter.stats.disabled_notices += 1;
+    // SAFETY: `tap` is the port that delivered this notice and is still alive;
+    // re-enabling is the documented recovery for both reasons.
+    unsafe { ffi::CGEventTapEnable(adapter.tap, 1) };
+    adapter.stats.recoveries += 1;
+    eprintln!(
+        "openkey: the event tap was disabled by the system ({reason:?}) and has been re-enabled. \
+         Keystrokes typed while it was off were delivered unchanged."
+    );
+}
+
 unsafe extern "C" fn callback(
     _proxy: *mut c_void,
     kind: u32,
     event: *mut c_void,
     user_info: *mut c_void,
 ) -> *mut c_void {
-    if event.is_null() || user_info.is_null() {
+    if user_info.is_null() {
         return event;
     }
 
@@ -398,6 +436,21 @@ unsafe extern "C" fn callback(
     // callback runs on the run-loop thread that owns it and nothing else mutates
     // it concurrently.
     let adapter = unsafe { &mut *(user_info.cast::<Adapter>()) };
+
+    // Disable notices are identified from the event *type*. Handle them before
+    // anything reads `event`: the system may deliver them with a NULL event, and
+    // neither re-enabling nor counting may depend on a payload it may not have.
+    if let Some(reason) = capture::disable_reason(kind) {
+        recover_from_disable(adapter, reason);
+        return event;
+    }
+
+    if event.is_null() {
+        // A NULL input event is a delivery we cannot read. Count it, never let
+        // it look like a swallow, and do not invent a key.
+        adapter.stats.null_events += 1;
+        return event;
+    }
 
     // SAFETY: `event` is non-null and a CGEvent.
     let user_data = unsafe { ffi::CGEventGetIntegerValueField(event, capture::FIELD_USER_DATA) };
@@ -418,18 +471,9 @@ unsafe extern "C" fn callback(
         NativeEvent::Key { .. } => adapter.stats.key_events += 1,
         NativeEvent::FlagsChanged { .. } => adapter.stats.flags_events += 1,
         NativeEvent::Mouse { .. } => adapter.stats.mouse_events += 1,
-        NativeEvent::TapDisabled { reason } => {
-            adapter.stats.disabled_notices += 1;
-            // SAFETY: `tap` is the port that delivered this notice and is still
-            // alive; re-enabling is the documented recovery for both reasons.
-            unsafe { ffi::CGEventTapEnable(adapter.tap, 1) };
-            adapter.stats.recoveries += 1;
-            eprintln!(
-                "openkey: the event tap was disabled by the system ({reason:?}) and has been \
-                 re-enabled. Keystrokes typed while it was off were delivered unchanged."
-            );
-            return event;
-        }
+        // Unreachable: the type was handled above. Kept so `classify` stays
+        // total and a future caller cannot silently lose a disable notice.
+        NativeEvent::TapDisabled { reason } => recover_from_disable(adapter, reason),
         NativeEvent::Other => {}
     }
 
@@ -487,6 +531,19 @@ mod tests {
         assert!(message.contains("not a permission state"));
         assert!(message.contains("CGEventTapCreate"));
         assert!(message.contains("location 0"));
+    }
+
+    #[test]
+    fn hid_request_types_match_the_sdk_enum() {
+        // IOHIDLib.h:162-165 declares
+        //   typedef enum { kIOHIDRequestTypePostEvent,
+        //                  kIOHIDRequestTypeListenEvent } IOHIDRequestType;
+        // with no explicit values, so the numbers are positional. Pinned because
+        // a swap is silent: `post` would report the listening answer and
+        // `listen` would pass a value outside the enum.
+        assert_eq!(IOHID_REQUEST_POST, 0);
+        assert_eq!(IOHID_REQUEST_LISTEN, 1);
+        assert_ne!(IOHID_REQUEST_POST, IOHID_REQUEST_LISTEN);
     }
 
     #[test]

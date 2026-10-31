@@ -92,6 +92,21 @@ pub const VK_FN: u16 = 0x3f;
 
 /// The full `(keycode, Key)` table. Tests iterate this, so a row that is added
 /// without a test is impossible and a row that is retyped fails its own case.
+///
+/// Two deliberate omissions and one deliberate addition:
+///
+/// - **Keypad Enter (0x4c) is absent.** Upstream has distinct codes —
+///   `KEY_ENTER 76` and `KEY_RETURN 36` (`platforms/mac.h:15-16`) — and though
+///   both are break codes (`Engine.cpp:22`), only Return is in the macro-break
+///   list (`Engine.cpp:30-31`). Mapping 76 to [`Key::Enter`] here would erase
+///   that difference before the engine can model it, so the keycode survives as
+///   [`Key::Other`] and C-002 decides. The key still passes through untouched.
+/// - **No media/function keys.** They are not engine input; `Other` carries the
+///   code without pretending to know what it is.
+/// - **Forward delete (0x75) maps to [`Key::Delete`].** `mac.h` has no entry for
+///   0x75 at all (its `KEY_DELETE` is 51, backspace), so this is an intentional
+///   extra rather than a ported row: the key exists on every Mac keyboard and
+///   the engine must see it as a break key, not as an opaque `Other`.
 pub(crate) const TABLE: &[(u16, Key)] = &[
     (VK_A, Key::A),
     (VK_B, Key::B),
@@ -346,6 +361,16 @@ mod tests {
         seen.sort_unstable();
         seen.dedup();
         assert_eq!(seen.len(), before, "a keycode appears twice in TABLE");
+    }
+
+    #[test]
+    fn keypad_enter_stays_other_until_the_engine_can_tell_it_apart() {
+        // 0x4c is upstream's `KEY_ENTER` (mac.h:15); Return is 0x24/36. Both
+        // break a word but only Return breaks a macro, so the distinction has
+        // to survive normalisation — `Key::Other(0x4c)` keeps the native code
+        // for C-002 instead of guessing `Key::Enter`.
+        assert_eq!(key_from_keycode(0x4c), Key::Other(0x4c));
+        assert_ne!(key_from_keycode(0x4c), Key::Enter);
     }
 
     #[test]

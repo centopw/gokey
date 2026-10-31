@@ -143,8 +143,8 @@ pub struct Banner {
     pub after: &'static str,
 }
 
-const AFTER_GRANT: &str = "Grant access, then come back to this window: GoKey re-checks and starts \
-                            intercepting on its own, without a restart.";
+const AFTER_GRANT: &str = "Grant access, then come back to this window: GoKey re-checks the \
+                           permission without a restart.";
 
 /// Copy for the three states. `Granted` returns `None` because there is nothing
 /// to warn about — a banner that is always present is a banner nobody reads.
@@ -248,7 +248,12 @@ mod tests {
             assert!(!banner.title.is_empty() && !banner.body.is_empty());
             assert!(banner.url.starts_with("x-apple.systempreferences:"));
             assert!(banner.url.contains("Privacy_Accessibility"));
+            assert!(banner.after.contains("re-checks"));
             assert!(banner.after.contains("without a restart"));
+            // The copy may promise the re-check; it must not promise that
+            // interception starts on its own, which only a new tap install does.
+            assert!(!banner.after.contains("starts"));
+            assert!(!banner.after.contains("intercepting on its own"));
             let (_, secondary) = banner.secondary.expect("input monitoring offered");
             assert!(secondary.contains("Privacy_ListenEvent"));
             assert_ne!(banner.url, secondary, "the two panes are distinct links");

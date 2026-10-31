@@ -153,10 +153,27 @@ impl NativeEvent {
     }
 }
 
+/// The disable reason a callback *event type* denotes, if it is a disable
+/// notice rather than an input event.
+///
+/// This is separate from [`classify`] because a disable notice is not an input
+/// event: the system may deliver it with a NULL `CGEvent`, so the callback has
+/// to recover before it reads a single field.
+pub fn disable_reason(event_type: u32) -> Option<DisableReason> {
+    match event_type {
+        TAP_DISABLED_BY_TIMEOUT => Some(DisableReason::Timeout),
+        TAP_DISABLED_BY_USER_INPUT => Some(DisableReason::UserInput),
+        _ => None,
+    }
+}
+
 /// Classify one callback. `utf16` is the event's Unicode payload when the caller
 /// could read it (key events only); the buffer is fixed-size and NUL-padded,
 /// which [`text_from_utf16`] handles.
 pub fn classify(event_type: u32, keycode: u16, flags: u64, utf16: &[u16]) -> NativeEvent {
+    if let Some(reason) = disable_reason(event_type) {
+        return NativeEvent::TapDisabled { reason };
+    }
     let mods = mods_from_flags(flags);
     match event_type {
         KEY_DOWN | KEY_UP => NativeEvent::Key {
@@ -189,12 +206,6 @@ pub fn classify(event_type: u32, keycode: u16, flags: u64, utf16: &[u16]) -> Nat
         RIGHT_MOUSE_DRAGGED => NativeEvent::Mouse {
             kind: MouseKind::RightDrag,
             mods,
-        },
-        TAP_DISABLED_BY_TIMEOUT => NativeEvent::TapDisabled {
-            reason: DisableReason::Timeout,
-        },
-        TAP_DISABLED_BY_USER_INPUT => NativeEvent::TapDisabled {
-            reason: DisableReason::UserInput,
         },
         _ => NativeEvent::Other,
     }
@@ -330,6 +341,19 @@ mod tests {
                 reason: DisableReason::UserInput
             }
         );
+        // The callback uses this from the event *type* alone, before it reads
+        // any event field: the system may hand it a NULL event.
+        assert_eq!(
+            disable_reason(TAP_DISABLED_BY_TIMEOUT),
+            Some(DisableReason::Timeout)
+        );
+        assert_eq!(
+            disable_reason(TAP_DISABLED_BY_USER_INPUT),
+            Some(DisableReason::UserInput)
+        );
+        for input in [KEY_DOWN, KEY_UP, FLAGS_CHANGED, LEFT_MOUSE_DOWN] {
+            assert_eq!(disable_reason(input), None);
+        }
     }
 
     #[test]
