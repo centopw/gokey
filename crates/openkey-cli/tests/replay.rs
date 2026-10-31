@@ -355,7 +355,7 @@ fn played_scripts() -> (PathBuf, Vec<PathBuf>) {
 }
 
 #[test]
-fn the_declared_scope_classifies_every_case_and_activates_telex() {
+fn the_declared_scope_classifies_every_case_and_activates_telex_and_edit() {
     let (scope, scripts) = played_scripts();
     assert_eq!(scripts.len(), 19, "18 corpus files + smoke");
 
@@ -374,23 +374,23 @@ fn the_declared_scope_classifies_every_case_and_activates_telex() {
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert!(
         run.stdout
-            .contains("scope: 311 case(s) over 19 corpus file(s)"),
+            .contains("scope: 314 case(s) over 19 corpus file(s)"),
         "{}",
         run.stdout
     );
     assert!(
         run.stdout
-            .contains("scope blocks: edit 49, opt 39, simple 27, telex 141, vni 55"),
+            .contains("scope blocks: edit 52, opt 39, simple 27, telex 141, vni 55"),
         "{}",
         run.stdout
     );
-    assert!(run.stdout.contains("active: telex"), "{}", run.stdout);
+    assert!(run.stdout.contains("active: telex, edit"), "{}", run.stdout);
 
     // Per file, the judged/skipped split must add up to that file's corpus: the
-    // 141 telex cases (132 corpus + 9 smoke) are in scope and the other 170 are
-    // skipped by name. A verdict may be PASS or FAIL — parity completeness is
-    // not this test's subject — but an in-scope case left unjudged is exit 2 and
-    // is a scope defect, not an engine result.
+    // 141 telex cases (132 corpus + 9 smoke) and the 52 edit cases are in scope,
+    // and the other 121 are skipped by name. A verdict may be PASS or FAIL —
+    // parity completeness is not this test's subject — but an in-scope case left
+    // unjudged is exit 2 and is a scope defect, not an engine result.
     let mut skipped = 0usize;
     let mut in_scope = 0usize;
     for script in &scripts {
@@ -434,9 +434,12 @@ fn the_declared_scope_classifies_every_case_and_activates_telex() {
         in_scope += counts[1];
         skipped += counts[2];
     }
-    assert_eq!(in_scope, 141, "the telex block is the active one");
     assert_eq!(
-        skipped, 170,
-        "everything outside the telex block is skipped"
+        in_scope, 193,
+        "the telex and edit blocks are the active ones"
+    );
+    assert_eq!(
+        skipped, 121,
+        "everything outside the telex and edit blocks is skipped"
     );
 }

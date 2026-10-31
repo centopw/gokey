@@ -125,6 +125,19 @@ pub fn key_event(typed: char) -> Option<KeyEvent> {
         ' ' => (Key::Space, false),
         'a'..='z' | 'A'..='Z' => (letter(typed), typed.is_ascii_uppercase()),
         '0'..='9' => (Key::Digit(typed as u8 - b'0'), false),
+        // `_characterMap` maps the shifted digits to the same keycodes with
+        // `CAPS_MASK` (`Vietnamese.cpp:535-545`); the shift flag reproduces
+        // that mask through `capsStatus`.
+        '!' => (Key::Digit(1), true),
+        '@' => (Key::Digit(2), true),
+        '#' => (Key::Digit(3), true),
+        '$' => (Key::Digit(4), true),
+        '%' => (Key::Digit(5), true),
+        '^' => (Key::Digit(6), true),
+        '&' => (Key::Digit(7), true),
+        '*' => (Key::Digit(8), true),
+        '(' => (Key::Digit(9), true),
+        ')' => (Key::Digit(0), true),
         '\'' => (Key::Quote, false),
         '[' => (Key::LeftBracket, false),
         ']' => (Key::RightBracket, false),
@@ -443,6 +456,26 @@ mod tests {
         assert!(upper.mods.shift);
         assert!(!key_event('a').unwrap().mods.shift);
         assert_eq!(key_event('7').unwrap().key, Key::Digit(7));
+        assert_eq!(key_event('(').unwrap().key, Key::Digit(9));
+        assert!(key_event('(').unwrap().mods.shift);
+        assert_eq!(key_event(')').unwrap().key, Key::Digit(0));
+        assert!(key_event(')').unwrap().mods.shift);
+        assert!(!key_event('9').unwrap().mods.shift);
+        // Every shifted digit `_characterMap` names maps back to its key.
+        for (symbol, digit) in [
+            ('!', 1),
+            ('@', 2),
+            ('#', 3),
+            ('$', 4),
+            ('%', 5),
+            ('^', 6),
+            ('&', 7),
+            ('*', 8),
+        ] {
+            let event = key_event(symbol).unwrap_or_else(|| panic!("{symbol} is in _characterMap"));
+            assert_eq!(event.key, Key::Digit(digit), "{symbol}");
+            assert!(event.mods.shift, "{symbol}");
+        }
         assert_eq!(key_event(' ').unwrap().key, Key::Space);
         assert_eq!(key_event('\u{8}').unwrap().key, Key::Backspace);
         assert!(key_event('ệ').is_none());
