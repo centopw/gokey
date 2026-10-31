@@ -5,6 +5,7 @@
 //! indexes `letters`; `core-purity` fails any other file that does.
 
 use crate::event::Key;
+use crate::tables::{KEY_G, KEY_I, KEY_Q, KEY_U, is_consonant};
 
 /// `MAX_BUFF` (`DataType.h:19`).
 pub const MAX_LETTERS: usize = 32;
@@ -110,15 +111,54 @@ impl Letter {
     /// build is not an oracle: low 16 bits hold an OS keycode there, and
     /// `platforms/*.h` differ per OS (ADR-0002 D3).
     pub fn to_bits(self) -> Option<u32> {
-        Some(
-            u32::from(key_code(self.key)?)
-                | (u32::from(self.caps) << 16)
-                | (u32::from(self.circ) << 17)
-                | (u32::from(self.w_mod) << 18)
-                | self.mark.to_bits()
-                | (u32::from(self.standalone) << 24)
-                | (u32::from(self.resolved) << 25),
-        )
+        key_code(self.key)?;
+        Some(self.raw_bits())
+    }
+
+    /// The C bit layout for *any* key, including the non-word keycodes the
+    /// engine stores transiently (`[`/`]` while a standalone vowel is being
+    /// produced). Crate-internal: the public `to_bits` keeps its C-001 contract
+    /// of refusing keys outside the word model.
+    pub(crate) fn raw_bits(self) -> u32 {
+        let code = match self.key {
+            Key::Other(code) => u32::from(code) & Self::CHAR_MASK,
+            key => key_code(key).map(u32::from).unwrap_or(0),
+        };
+        code | (u32::from(self.caps) << 16)
+            | (u32::from(self.circ) << 17)
+            | (u32::from(self.w_mod) << 18)
+            | self.mark.to_bits()
+            | (u32::from(self.standalone) << 24)
+            | (u32::from(self.resolved) << 25)
+    }
+
+    /// [`Letter::from_bits`] plus the raw-keycode fallback described on
+    /// [`Letter::raw_bits`]. `None` only for bits outside the C layout.
+    pub(crate) fn from_bits_raw(bits: u32) -> Option<Self> {
+        if bits & !Self::KNOWN_MASK != 0 {
+            return None;
+        }
+        let code = u16::try_from(bits & Self::CHAR_MASK).ok()?;
+        match key_from_code(code) {
+            Some(key) => Some(Self {
+                key,
+                caps: bits & Self::CAPS_MASK != 0,
+                circ: bits & Self::TONE_MASK != 0,
+                w_mod: bits & Self::TONEW_MASK != 0,
+                mark: Mark::from_bits(bits & Self::MARK_MASK)?,
+                standalone: bits & Self::STANDALONE_MASK != 0,
+                resolved: bits & Self::CHAR_CODE_MASK != 0,
+            }),
+            None => Some(Self {
+                key: Key::Other(code),
+                caps: bits & Self::CAPS_MASK != 0,
+                circ: bits & Self::TONE_MASK != 0,
+                w_mod: bits & Self::TONEW_MASK != 0,
+                mark: Mark::from_bits(bits & Self::MARK_MASK)?,
+                standalone: bits & Self::STANDALONE_MASK != 0,
+                resolved: bits & Self::CHAR_CODE_MASK != 0,
+            }),
+        }
     }
 
     /// Inverse of [`Letter::to_bits`]; `None` on an unknown key code, an
@@ -143,7 +183,7 @@ impl Letter {
 ///
 /// The exhaustive match is deliberate: a new `Key` variant must state whether it
 /// is a word key rather than fall through a wildcard.
-fn key_code(key: Key) -> Option<u16> {
+pub(crate) fn key_code(key: Key) -> Option<u16> {
     match key {
         Key::A => Some(0),
         Key::B => Some(11),
@@ -314,6 +354,19 @@ impl Word {
         }
     }
 
+    /// `insertState` (`Engine.cpp:369-379`): the same shift as [`Word::push`],
+    /// but the dropped front letter is discarded — `KeyStates` has no
+    /// `_longWordHelper` counterpart to restore it from.
+    pub(crate) fn push_drop_front(&mut self, letter: Letter) {
+        if self.len() >= MAX_LETTERS {
+            self.letters.copy_within(1..MAX_LETTERS, 0);
+            self.letters[MAX_LETTERS - 1] = letter;
+        } else {
+            self.letters[usize::from(self.len)] = letter;
+            self.len += 1;
+        }
+    }
+
     /// Delete (`Engine.cpp:1436-1447`): when `overflow` is non-empty the last
     /// dropped letter shifts back in at the front and `len` stays put.
     pub fn pop(&mut self) {
@@ -333,6 +386,206 @@ impl Word {
         self.len = 0;
         self.overflow.clear();
     }
+
+    /// Set `_index` directly, leaving the slots behind it untouched. Upstream
+    /// does this in `startNewSession`, `restoreLastTypingState` and the bracket
+    /// case (`Engine.cpp:150, 451, 1543`); the stale slots stay readable, which
+    /// the engine relies on (e.g. `TypingWord[VSI + 1]` may sit past `_index`).
+    pub(crate) fn set_len(&mut self, len: usize) {
+        self.len = len.min(MAX_LETTERS) as u8;
+    }
+
+    /// Letters dropped off the front at capacity (`_longWordHelper`).
+    pub(crate) fn overflow(&self) -> &[Letter] {
+        &self.overflow
+    }
+
+    pub(crate) fn clear_overflow(&mut self) {
+        self.overflow.clear();
+    }
+
+    /// Raw C bits of one slot (`TypingWord[index]`), including stale slots.
+    pub(crate) fn bits_at(&self, index: usize) -> u32 {
+        self.letters
+            .get(index)
+            .map(|letter| letter.raw_bits())
+            .unwrap_or(0)
+    }
+
+    /// Low 16 bits of one slot, i.e. upstream `CHR(index)`.
+    pub(crate) fn code_at(&self, index: usize) -> u16 {
+        match self.letters.get(index).map(|letter| letter.key) {
+            Some(Key::Other(code)) => code,
+            Some(key) => key_code(key).unwrap_or(0),
+            None => 0,
+        }
+    }
+
+    pub(crate) fn set_bits(&mut self, index: usize, bits: u32) {
+        if index < MAX_LETTERS {
+            self.letters[index] = Letter::from_bits_raw(bits).unwrap_or_default();
+        }
+    }
+
+    pub(crate) fn or_bits(&mut self, index: usize, mask: u32) {
+        let bits = self.bits_at(index) | mask;
+        self.set_bits(index, bits);
+    }
+
+    pub(crate) fn clear_bits(&mut self, index: usize, mask: u32) {
+        let bits = self.bits_at(index) & !mask;
+        self.set_bits(index, bits);
+    }
+
+    /// `findAndCalculateVowel` (`Engine.cpp:560-585`).
+    pub(crate) fn span(&self, scan: Scan) -> VowelSpan {
+        let mut span = VowelSpan::default();
+        let index = self.len();
+        if index == 0 {
+            return span;
+        }
+        let mut at = index - 1;
+        loop {
+            if is_consonant(self.code_at(at)) {
+                if span.count > 0 {
+                    break;
+                }
+            } else {
+                if span.count == 0 {
+                    span.end = at as u8;
+                }
+                if scan == Scan::Word && at >= 1 {
+                    let code = self.code_at(at);
+                    let previous = self.code_at(at - 1);
+                    // `gi`/`qu` stop the run, so neither letter counts.
+                    if (code == KEY_I && previous == KEY_G) || (code == KEY_U && previous == KEY_Q)
+                    {
+                        break;
+                    }
+                }
+                span.start = at as u8;
+                span.count += 1;
+            }
+            if at == 0 {
+                break;
+            }
+            at -= 1;
+        }
+        // Do not count the `u` of `qu` as the vowel (`Engine.cpp:580-584`).
+        let start = usize::from(span.start);
+        if start >= 1 && self.code_at(start) == KEY_U && self.code_at(start - 1) == KEY_Q {
+            span.start += 1;
+            span.count -= 1;
+        }
+        span
+    }
+
+    /// `checkCorrectVowel` (`Engine.cpp:468-499`).
+    ///
+    /// `from` mirrors the by-value `k` at the C call sites; upstream overwrites
+    /// it with `_index - 1` on entry, so it is accepted for call-site symmetry
+    /// and otherwise ignored.
+    pub(crate) fn tail_matches(
+        &self,
+        row: &[u16],
+        from: usize,
+        quick_end_consonant: bool,
+        restrict_ct: bool,
+    ) -> bool {
+        let _ = from;
+        let index = self.len();
+        if index == 0 || row.is_empty() {
+            return false;
+        }
+        // "qu" endings are never correct (`Engine.cpp:469-473`).
+        if index >= 2 && self.code_at(index - 1) == KEY_U && self.code_at(index - 2) == KEY_Q {
+            return false;
+        }
+        let end_mask = if quick_end_consonant {
+            !crate::tables::END_CONSONANT_MASK
+        } else {
+            u16::MAX
+        };
+        let mut k = index as isize - 1;
+        for j in (0..row.len()).rev() {
+            if (row[j] & end_mask) != self.code_at(k as usize) {
+                return false;
+            }
+            k -= 1;
+            if k < 0 {
+                break;
+            }
+        }
+        // `~ \` ?` cannot follow the end consonants "c", "t" (`Engine.cpp:485-492`).
+        if row.len() > 1
+            && restrict_ct
+            && (row[1] == crate::tables::KEY_C
+                || row[1] == crate::tables::KEY_T
+                || (row.len() > 2 && row[2] == crate::tables::KEY_T))
+        {
+            return false;
+        }
+        if k >= 0 && self.code_at(k as usize) == self.code_at(k as usize + 1) {
+            return false;
+        }
+        true
+    }
+
+    /// `checkQuickConsonant` start half (`Engine.cpp:1241-1254`).
+    pub(crate) fn insert_quick_start_pair(&mut self, pair: [u16; 2]) {
+        if self.len() < MAX_LETTERS - 1 {
+            self.len += 1;
+        }
+        let caps_of = |letter: Letter| u32::from(letter.caps) << 16;
+        let caps_first = caps_of(self.letters[0]);
+        let len = self.len();
+        for i in (2..len).rev() {
+            self.letters[i] = self.letters[i - 1];
+        }
+        let caps_second = caps_of(self.letters[2]);
+        let second = u32::from(pair[1])
+            | if caps_first != 0 && caps_second != 0 {
+                0x10000
+            } else {
+                0
+            };
+        let first = u32::from(pair[0]) | caps_first;
+        self.letters[1] = Letter::from_bits_raw(second).unwrap_or_default();
+        self.letters[0] = Letter::from_bits_raw(first).unwrap_or_default();
+    }
+
+    /// `checkQuickConsonant` end half (`Engine.cpp:1255-1271`).
+    pub(crate) fn insert_quick_end_pair(&mut self, pair: [u16; 2]) {
+        if self.len() < MAX_LETTERS - 1 {
+            self.len += 1;
+        }
+        let len = self.len();
+        let caps = u32::from(self.letters[len - 2].caps) << 16;
+        self.letters[len - 1] =
+            Letter::from_bits_raw(u32::from(pair[1]) | caps).unwrap_or_default();
+        self.letters[len - 2] =
+            Letter::from_bits_raw(u32::from(pair[0]) | caps).unwrap_or_default();
+    }
+}
+
+/// Which break rule [`Word::span`] applies at `gi`/`qu`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Scan {
+    /// `findAndCalculateVowel(false)`: stop at `gi`/`qu`.
+    Word,
+    /// `findAndCalculateVowel(true)`: grammar scan, no `gi`/`qu` break.
+    Grammar,
+}
+
+/// `VSI`/`VEI`/`vowelCount` (`Engine.cpp:101-104`).
+///
+/// `vowelWillSetMark` is not part of this struct: upstream computes it inside
+/// `insertMark`/`handleOldMark`/`handleModernMark`, and so does the engine.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct VowelSpan {
+    pub start: u8,
+    pub end: u8,
+    pub count: u8,
 }
 
 #[cfg(test)]
@@ -673,5 +926,156 @@ mod tests {
         assert!(word.overflow.is_empty());
         assert_eq!(word.get(0), None);
         assert!(word.letters().is_empty());
+    }
+
+    #[test]
+    fn push_drop_front_discards_the_front_letter_at_capacity() {
+        let mut word = Word::new();
+        for n in 0..MAX_LETTERS as u16 {
+            word.push_drop_front(letter(n));
+        }
+        word.push_drop_front(letter(32));
+        assert_eq!(word.len(), MAX_LETTERS);
+        assert!(
+            word.overflow.is_empty(),
+            "KeyStates has no long-word helper"
+        );
+        assert_eq!(word.get(0), Some(letter(1)));
+        assert_eq!(word.get(MAX_LETTERS - 1), Some(letter(32)));
+    }
+
+    use crate::tables::{END_CONSONANT_MASK, KEY_A, KEY_C, KEY_N, KEY_T};
+
+    fn word_of(codes: &[u16]) -> Word {
+        let mut word = Word::new();
+        for &code in codes {
+            word.push(letter(code));
+        }
+        word
+    }
+
+    fn span_of(codes: &[u16], scan: Scan) -> VowelSpan {
+        word_of(codes).span(scan)
+    }
+
+    #[test]
+    fn span_stops_at_qu_and_gi_in_a_word_scan() {
+        assert_eq!(
+            span_of(&[KEY_Q, KEY_U], Scan::Word),
+            VowelSpan {
+                start: 0,
+                end: 1,
+                count: 0
+            },
+            "qu is not a vowel run"
+        );
+        assert_eq!(
+            span_of(&[KEY_G, KEY_I], Scan::Word),
+            VowelSpan {
+                start: 0,
+                end: 1,
+                count: 0
+            },
+            "gi is not a vowel run"
+        );
+        assert_eq!(
+            span_of(&[KEY_Q, KEY_U, KEY_A], Scan::Word),
+            VowelSpan {
+                start: 2,
+                end: 2,
+                count: 1
+            },
+            "the a of qua is the only vowel"
+        );
+        assert_eq!(
+            span_of(&[KEY_G, KEY_I, KEY_A], Scan::Word),
+            VowelSpan {
+                start: 2,
+                end: 2,
+                count: 1
+            },
+            "the a of gia is the only vowel"
+        );
+    }
+
+    #[test]
+    fn span_covers_the_vowel_run_and_the_grammar_scan_has_no_qu_break() {
+        assert_eq!(
+            span_of(&[KEY_N, KEY_G, KEY_A], Scan::Word),
+            VowelSpan {
+                start: 2,
+                end: 2,
+                count: 1
+            }
+        );
+        assert_eq!(
+            span_of(&[KEY_Q, KEY_U, KEY_A, KEY_I], Scan::Word),
+            VowelSpan {
+                start: 2,
+                end: 3,
+                count: 2
+            },
+            "u of qu is dropped and the ai run is counted"
+        );
+        // Without the break the u is counted first, then the trailing
+        // correction removes it — upstream's `VSI++; vowelCount--`.
+        assert_eq!(
+            span_of(&[KEY_Q, KEY_U], Scan::Grammar),
+            VowelSpan {
+                start: 2,
+                end: 1,
+                count: 0
+            }
+        );
+    }
+
+    #[test]
+    fn tail_matches_refuses_a_word_ending_in_qu() {
+        let word = word_of(&[KEY_Q, KEY_U]);
+        assert!(!word.tail_matches(&[KEY_U], word.len(), false, false));
+    }
+
+    #[test]
+    fn tail_matches_limits_c_and_t_to_sac_and_nang() {
+        let word = word_of(&[KEY_A, KEY_C]);
+        assert!(word.tail_matches(&[KEY_A, KEY_C], word.len(), false, false));
+        assert!(
+            !word.tail_matches(&[KEY_A, KEY_C], word.len(), false, true),
+            "F/X/R may not sit on a c/t ending"
+        );
+        let other = word_of(&[KEY_A, KEY_N, KEY_T]);
+        assert!(
+            !other.tail_matches(&[KEY_A, KEY_N, KEY_T], other.len(), false, true),
+            "the third letter is also checked for t"
+        );
+    }
+
+    #[test]
+    fn tail_matches_refuses_a_repeated_letter_before_the_tail() {
+        let repeated = word_of(&[KEY_A, KEY_A]);
+        assert!(!repeated.tail_matches(&[KEY_A], repeated.len(), false, false));
+        let distinct = word_of(&[KEY_N, KEY_A]);
+        assert!(distinct.tail_matches(&[KEY_A], distinct.len(), false, false));
+    }
+
+    #[test]
+    fn tail_matches_strips_the_end_consonant_bit_when_quick_end_is_on() {
+        // With quick end consonants, "g" stands for "ng": the row entry says so
+        // with `END_CONSONANT_MASK`, and the mask is only stripped when the
+        // preference is on (`Engine.cpp:480`).
+        let word = word_of(&[KEY_A, KEY_G]);
+        let row = [KEY_A, KEY_G | END_CONSONANT_MASK];
+        assert!(!word.tail_matches(&row, word.len(), false, false));
+        assert!(word.tail_matches(&row, word.len(), true, false));
+    }
+
+    #[test]
+    fn tail_matches_ignores_the_marks_on_the_tail() {
+        let mut word = Word::new();
+        word.push(Letter {
+            mark: Mark::Sac,
+            ..letter(KEY_A)
+        });
+        assert!(word.tail_matches(&[KEY_A], word.len(), false, false));
     }
 }

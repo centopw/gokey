@@ -118,10 +118,31 @@ pub struct Edit {
     pub beep: bool,
 }
 
+/// Upstream `extCode` (`DataType.h:69-75`): why a passing key was not consumed.
+///
+/// Adapters use it for their own bookkeeping (the macOS hook tracks the
+/// `_syncKey` length), never to change what is typed. Upstream leaves `0` as a
+/// transient value inside the main branch; every path that returns to the
+/// adapter ends on 1-4, so `Normal` (3) is the neutral value here.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Ext {
+    /// 3 — an ordinary key; also the neutral value.
+    #[default]
+    Normal,
+    /// 1 — word break.
+    Break,
+    /// 2 — delete key.
+    Delete,
+    /// 4 — do not send an empty character (`OpenKey.mm:742`).
+    SuppressEmpty,
+}
+
 #[derive(Clone, Debug)]
 pub struct Outcome {
     pub action: Action,
     pub edit: Option<Edit>,
     /// Key to re-inject (e.g. the break character after a restore).
     pub passthrough: Option<KeyEvent>,
+    /// Why the key was or was not consumed (ADR-0002 D5).
+    pub ext: Ext,
 }

@@ -33,5 +33,10 @@ block: edit file:tests/corpus/editing.tsv,file:tests/corpus/editing-sequences.ts
 block: opt file:tests/corpus/options.tsv,file:tests/corpus/options-combos.tsv
 
 # Empty at K-005: every case resolves, every block is inactive, so the run
-# reports 311 skipped and exits 0. `active:` names a defined block only.
-active:
+# reported 311 skipped and exited 0. `active:` names a defined block only.
+#
+# C-002 activates `telex`: its 141 cases (132 corpus + 9 smoke) are replayed and
+# judged, the remaining 170 are skipped by name. Parity is red until those 141
+# are judged and at least 99.5% agree with the oracle — never by narrowing this
+# block.
+active: telex

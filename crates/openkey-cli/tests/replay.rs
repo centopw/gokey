@@ -209,16 +209,19 @@ fn an_all_inactive_scope_skips_every_case_and_is_green() {
 
 #[test]
 fn an_in_scope_pending_case_is_not_green() {
+    // Telex is implemented (C-002), VNI is not, so the telex row is judged and
+    // the VNI row is pending. The run is still red: one in-scope case has no
+    // verdict, and a judged neighbour must not make the run look green.
     let run = scoped(
         &["replay", "--corpus", &corpus("basic.tsv")],
         "scope-active.txt",
     );
     assert_eq!(run.code, 2, "{}", run.stdout);
-    assert_eq!(status_of(&run.stdout, "case-one"), Some("PENDING"));
+    assert_eq!(status_of(&run.stdout, "case-one"), Some("PASS"));
     assert_eq!(status_of(&run.stdout, "case-two"), Some("PENDING"));
     assert!(
         run.stdout
-            .contains("scope: judged 0 / in-scope 2 / skipped 0"),
+            .contains("scope: judged 1 / in-scope 2 / skipped 0"),
         "{}",
         run.stdout
     );
@@ -226,16 +229,18 @@ fn an_in_scope_pending_case_is_not_green() {
 
 #[test]
 fn only_active_blocks_are_judged() {
+    // `scope-mixed.txt` activates `telex` only: its case is judged and passes,
+    // while the VNI case is skipped by name rather than replayed.
     let run = scoped(
         &["replay", "--corpus", &corpus("basic.tsv")],
         "scope-mixed.txt",
     );
-    assert_eq!(run.code, 2, "{}", run.stdout);
-    assert_eq!(status_of(&run.stdout, "case-one"), Some("PENDING"));
+    assert_eq!(run.code, 0, "{}", run.stdout);
+    assert_eq!(status_of(&run.stdout, "case-one"), Some("PASS"));
     assert_eq!(status_of(&run.stdout, "case-two"), Some("SKIP"));
     assert!(
         run.stdout
-            .contains("scope: judged 0 / in-scope 1 / skipped 1"),
+            .contains("scope: judged 1 / in-scope 1 / skipped 1"),
         "{}",
         run.stdout
     );
@@ -350,12 +355,12 @@ fn played_scripts() -> (PathBuf, Vec<PathBuf>) {
 }
 
 #[test]
-fn the_declared_scope_classifies_every_case_at_the_turn_three_commit() {
+fn the_declared_scope_classifies_every_case_and_activates_telex() {
     let (scope, scripts) = played_scripts();
     assert_eq!(scripts.len(), 19, "18 corpus files + smoke");
 
     // One global pass over the played set: zero unclassified, exactly one block
-    // per case, and the five-block split this commit expects.
+    // per case, and the five-block split.
     let mut args = vec![
         "scope".to_string(),
         "--scope".to_string(),
@@ -379,10 +384,15 @@ fn the_declared_scope_classifies_every_case_at_the_turn_three_commit() {
         "{}",
         run.stdout
     );
-    assert!(run.stdout.contains("active: none"), "{}", run.stdout);
+    assert!(run.stdout.contains("active: telex"), "{}", run.stdout);
 
-    // And per file, every case is skipped by name while `active:` is empty.
+    // Per file, the judged/skipped split must add up to that file's corpus: the
+    // 141 telex cases (132 corpus + 9 smoke) are in scope and the other 170 are
+    // skipped by name. A verdict may be PASS or FAIL — parity completeness is
+    // not this test's subject — but an in-scope case left unjudged is exit 2 and
+    // is a scope defect, not an engine result.
     let mut skipped = 0usize;
+    let mut in_scope = 0usize;
     for script in &scripts {
         let replay = invoke_owned(&[
             "replay".to_string(),
@@ -391,29 +401,42 @@ fn the_declared_scope_classifies_every_case_at_the_turn_three_commit() {
             "--scope".to_string(),
             scope.display().to_string(),
         ]);
-        assert_eq!(
-            replay.code,
-            0,
+        assert!(
+            !replay.stderr.contains("not classified")
+                && !replay.stderr.contains("exactly one block"),
             "{} is not fully classified by parity/scope.txt: {}",
             script.display(),
             replay.stderr
         );
-        assert!(
-            replay
-                .stdout
-                .contains("scope: judged 0 / in-scope 0 / skipped "),
-            "{}: every block is inactive at turn 3:\n{}",
+        assert_ne!(
+            replay.code,
+            2,
+            "{}: an in-scope case has no verdict:\n{}",
             script.display(),
             replay.stdout
         );
-        skipped += replay
+        let line = replay
             .stdout
             .lines()
-            .filter(|line| line.starts_with("SKIP "))
-            .count();
+            .find(|line| line.starts_with("scope: judged "))
+            .unwrap_or_else(|| panic!("{}: no scope line:\n{}", script.display(), replay.stdout));
+        let counts: Vec<usize> = line
+            .split_whitespace()
+            .filter_map(|token| token.parse().ok())
+            .collect();
+        assert_eq!(counts.len(), 3, "{}: {line}", script.display());
+        assert_eq!(
+            counts[0],
+            counts[1],
+            "{}: judged and in-scope disagree:\n{line}",
+            script.display()
+        );
+        in_scope += counts[1];
+        skipped += counts[2];
     }
+    assert_eq!(in_scope, 141, "the telex block is the active one");
     assert_eq!(
-        skipped, 311,
-        "300 corpus cases + 11 smoke cases at #29's head (bf5ffcc)"
+        skipped, 170,
+        "everything outside the telex block is skipped"
     );
 }
