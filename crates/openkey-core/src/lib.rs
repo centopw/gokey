@@ -19,7 +19,8 @@ pub mod charset;
 pub mod engine;
 pub mod event;
 pub mod options;
+pub mod word;
 
-pub use engine::Engine;
+pub use engine::{Engine, Letter, Mark, Word};
 pub use event::{Action, Edit, Key, KeyEvent, Mods, Outcome, Phase};
 pub use options::{Charset, InputMethod, Options};
