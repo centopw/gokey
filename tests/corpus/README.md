@@ -50,9 +50,13 @@ Status of rules 2 and 3 in v0:
   Simple Telex 1's tone placement — are pinned with the engine's actual output
   as `expected` and a comment naming the upstream behaviour. They are recorded,
   not silenced; adding `xfail:` support is a K-004 follow-up.
-- `openkey-cli replay` does not exist yet (K-005), so today the corpus is
-  judged against the C++ harness only. Rule 3 starts holding when K-005 lands,
-  and `scripts/parity.sh` is where both runs will meet.
+- `openkey-cli replay` exists since K-005 and reports one status per case
+  (`PASS` / `FAIL` / `PENDING` / `SKIP` / `INVALID`) plus a summary, with
+  `--diff ref-engine` adding the reference harness as a second judge. While
+  `Engine::apply` is a stub (`todo!()` until C-002) every case reports
+  `PENDING` and the command exits 2: the port has no document to compare yet,
+  so no agreement is claimed. Rule 3 starts holding when C-002 lands and
+  `scripts/parity.sh` is wired to run both sides.
 
 Files: `telex-basic`, `telex-tones`, `telex-words`, `telex-syllables`,
 `vni-basic`, `vni-words`, `simple-telex`, `editing`, `options`.
