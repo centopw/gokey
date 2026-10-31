@@ -147,7 +147,7 @@ mod tests {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    use openkey_core::{Edit, Key, Mods, Phase};
+    use openkey_core::{Edit, Ext, Key, Mods, Phase};
 
     use super::*;
     use crate::capture::{DisableReason, MouseKind};
@@ -170,6 +170,7 @@ mod tests {
                 beep: false,
             }),
             passthrough: None,
+            ext: Ext::Normal,
         }
     }
 
@@ -198,6 +199,7 @@ mod tests {
                 action: Action::Pass,
                 edit: None,
                 passthrough: None,
+                ext: Ext::Normal,
             })
         }
     }

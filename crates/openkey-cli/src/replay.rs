@@ -1,7 +1,7 @@
 //! Replay one corpus case through [`openkey_core::Engine`] (K-005).
 //!
-//! The engine is still a stub (`Engine::apply` is `todo!()` until C-002), so a
-//! replay normally ends in `engine-pending`, not in a verdict. That is reported
+//! Telex is the only input method the engine implements (C-002); VNI and Simple
+//! Telex 1/2 still end in `engine-pending`, not in a verdict. That is reported
 //! as its own status rather than as a disagreement: "the port has not been
 //! written yet" and "the port disagrees with the oracle" are different facts and
 //! must not collapse into the same exit code.
@@ -13,9 +13,8 @@
 //! The document model mirrors the reference harness (`scripts/parity/harness.cpp`,
 //! the part of the macOS hook that lives outside the engine). It is the only
 //! place in this crate that encodes a typing rule, and every rule carries the
-//! upstream reference the harness cites. Until C-002 lands it is exercised only
-//! by unit tests over synthetic outcomes; the first real diff against the oracle
-//! is what validates it.
+//! upstream reference the harness cites. It is unit-tested over synthetic
+//! outcomes, and the real diff against the oracle is the parity run itself.
 
 use std::panic::{self, AssertUnwindSafe};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -300,12 +299,14 @@ fn key_character(key: Key, shift: bool) -> Option<char> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use openkey_core::Ext;
 
     fn outcome(action: Action, edit: Option<Edit>, passthrough: Option<KeyEvent>) -> Outcome {
         Outcome {
             action,
             edit,
             passthrough,
+            ext: Ext::Normal,
         }
     }
 
