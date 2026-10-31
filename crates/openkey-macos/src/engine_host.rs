@@ -147,7 +147,7 @@ mod tests {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    use openkey_core::{Edit, Ext, Key, Mods, Phase};
+    use openkey_core::{Edit, Encoded, Ext, Key, Mods, Phase};
 
     use super::*;
     use crate::capture::{DisableReason, MouseKind};
@@ -166,7 +166,7 @@ mod tests {
             action: Action::Process,
             edit: Some(Edit {
                 backspaces: 1,
-                text: "ệ".to_owned(),
+                text: Encoded::Utf16(vec![0x1EC7]),
                 beep: false,
             }),
             passthrough: None,

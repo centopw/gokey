@@ -19,7 +19,7 @@
 use std::panic::{self, AssertUnwindSafe};
 use std::sync::{Arc, Mutex, OnceLock};
 
-use openkey_core::{Action, Edit, Engine, Key, KeyEvent, Mods, Outcome, Phase};
+use openkey_core::{Action, Edit, Encoded, Engine, Key, KeyEvent, Mods, Outcome, Phase};
 
 use crate::corpus::Case;
 use crate::flags;
@@ -49,7 +49,7 @@ pub fn run(case: &Case) -> Result<String, ReplayError> {
             ))
         })?;
         let outcome = catch_apply(&mut engine, &event)?;
-        apply_outcome(&mut document, typed, &outcome);
+        apply_outcome(&mut document, typed, &outcome)?;
     }
 
     Ok(document)
@@ -190,17 +190,25 @@ fn letter(typed: char) -> Key {
 /// - `Restore` / `RestoreAndBreak`: as `Process`, then the pressed key is
 ///   re-sent as a character (`:483-491`), then any re-injected key.
 /// - `Macro`: the expansion replaces the typed sequence; nothing else is typed.
-pub fn apply_outcome(document: &mut String, typed: char, outcome: &Outcome) {
+///
+/// A byte-charset edit is refused rather than decoded: the document model here
+/// is a Unicode string, the corpus has no charset option to select one, and
+/// guessing a byte decoder would compare against the wrong text.
+pub fn apply_outcome(
+    document: &mut String,
+    typed: char,
+    outcome: &Outcome,
+) -> Result<(), ReplayError> {
     match outcome.action {
         Action::Pass | Action::BreakWord => {
             if let Some(edit) = &outcome.edit {
-                apply_edit(document, edit);
+                apply_edit(document, edit)?;
             }
             type_char(document, typed);
         }
         Action::Process => {
             if let Some(edit) = &outcome.edit {
-                apply_edit(document, edit);
+                apply_edit(document, edit)?;
             }
             if let Some(event) = &outcome.passthrough {
                 type_event(document, event);
@@ -208,7 +216,7 @@ pub fn apply_outcome(document: &mut String, typed: char, outcome: &Outcome) {
         }
         Action::Restore | Action::RestoreAndBreak => {
             if let Some(edit) = &outcome.edit {
-                apply_edit(document, edit);
+                apply_edit(document, edit)?;
             }
             type_char(document, typed);
             if let Some(event) = &outcome.passthrough {
@@ -217,13 +225,29 @@ pub fn apply_outcome(document: &mut String, typed: char, outcome: &Outcome) {
         }
         Action::Macro => {
             if let Some(edit) = &outcome.edit {
-                apply_edit(document, edit);
+                apply_edit(document, edit)?;
             }
         }
     }
+    Ok(())
 }
 
-fn apply_edit(document: &mut String, edit: &Edit) {
+fn apply_edit(document: &mut String, edit: &Edit) -> Result<(), ReplayError> {
+    // Refuse a byte-charset edit before touching the document. Backspaces and
+    // text are one decision; applying the deletions and then failing would
+    // leave the document in a state the engine never produced.
+    let text = match &edit.text {
+        // Every value in the five tables is BMP, so the loss-free decode here
+        // and the harness's surrogate-aware `appendUnits` agree.
+        Encoded::Utf16(units) => String::from_utf16_lossy(units),
+        Encoded::Bytes(_) => {
+            return Err(ReplayError::Invalid(
+                "the engine emitted a byte-charset edit; the replay document is a Unicode \
+                 string and no corpus case can select a charset (C-005 adds no charset option)"
+                    .to_string(),
+            ));
+        }
+    };
     let count = edit.backspaces as usize;
     // Upstream applies the backspaces only when `0 < count < MAX_BUFF`
     // (`OpenKey.mm:764-769`). It is the app's condition, not a safety check of
@@ -233,7 +257,8 @@ fn apply_edit(document: &mut String, edit: &Edit) {
         let keep = len.saturating_sub(count);
         *document = document.chars().take(keep).collect();
     }
-    document.push_str(&edit.text);
+    document.push_str(&text);
+    Ok(())
 }
 
 fn type_char(document: &mut String, typed: char) {
@@ -310,12 +335,22 @@ mod tests {
         }
     }
 
+    /// `apply_outcome`, asserting the case stays in the Unicode charset the
+    /// corpus selects (a byte edit is the only error it returns).
+    fn apply(document: &mut String, typed: char, outcome: &Outcome) {
+        apply_outcome(document, typed, outcome).expect("the corpus never selects a byte charset");
+    }
+
+    fn unicode(text: &str) -> Encoded {
+        Encoded::Utf16(text.encode_utf16().collect())
+    }
+
     #[test]
     fn pass_types_the_key_and_backspace_deletes() {
         let mut doc = String::from("vi");
-        apply_outcome(&mut doc, 'e', &outcome(Action::Pass, None, None));
+        apply(&mut doc, 'e', &outcome(Action::Pass, None, None));
         assert_eq!(doc, "vie");
-        apply_outcome(&mut doc, '\u{8}', &outcome(Action::Pass, None, None));
+        apply(&mut doc, '\u{8}', &outcome(Action::Pass, None, None));
         assert_eq!(doc, "vi");
     }
 
@@ -324,10 +359,10 @@ mod tests {
         let mut doc = String::from("vieejt");
         let edit = Edit {
             backspaces: 4,
-            text: "ệt".to_string(),
+            text: unicode("ệt"),
             beep: false,
         };
-        apply_outcome(&mut doc, 't', &outcome(Action::Process, Some(edit), None));
+        apply(&mut doc, 't', &outcome(Action::Process, Some(edit), None));
         assert_eq!(doc, "việt");
     }
 
@@ -336,10 +371,10 @@ mod tests {
         let mut doc = String::from("vi");
         let edit = Edit {
             backspaces: Engine::MAX_BUFFER as u8,
-            text: String::new(),
+            text: Encoded::default(),
             beep: false,
         };
-        apply_outcome(&mut doc, 'x', &outcome(Action::Process, Some(edit), None));
+        apply(&mut doc, 'x', &outcome(Action::Process, Some(edit), None));
         assert_eq!(doc, "vi");
     }
 
@@ -348,10 +383,10 @@ mod tests {
         let mut doc = String::from("vi");
         let edit = Edit {
             backspaces: 8,
-            text: "a".to_string(),
+            text: unicode("a"),
             beep: false,
         };
-        apply_outcome(&mut doc, 'a', &outcome(Action::Process, Some(edit), None));
+        apply(&mut doc, 'a', &outcome(Action::Process, Some(edit), None));
         assert_eq!(doc, "a");
     }
 
@@ -360,10 +395,10 @@ mod tests {
         let mut doc = String::from("as");
         let edit = Edit {
             backspaces: 2,
-            text: "á".to_string(),
+            text: unicode("á"),
             beep: false,
         };
-        apply_outcome(&mut doc, 's', &outcome(Action::Restore, Some(edit), None));
+        apply(&mut doc, 's', &outcome(Action::Restore, Some(edit), None));
         assert_eq!(doc, "ás");
     }
 
@@ -372,16 +407,32 @@ mod tests {
         let mut doc = String::from("a");
         let edit = Edit {
             backspaces: 1,
-            text: "à".to_string(),
+            text: unicode("à"),
             beep: false,
         };
         let space = key_event(' ').unwrap();
-        apply_outcome(
+        apply(
             &mut doc,
             'a',
             &outcome(Action::Process, Some(edit), Some(space)),
         );
         assert_eq!(doc, "à ");
+    }
+
+    #[test]
+    fn a_byte_charset_edit_is_refused_rather_than_decoded() {
+        let mut doc = String::from("vi");
+        let edit = Edit {
+            backspaces: 2,
+            text: Encoded::Bytes(vec![0x76, 0x69]),
+            beep: false,
+        };
+        let error = apply_outcome(&mut doc, 'x', &outcome(Action::Process, Some(edit), None))
+            .expect_err("a byte edit has no Unicode document meaning");
+        assert!(matches!(error, ReplayError::Invalid(_)), "{error:?}");
+        // Backspaces and text are one decision, so the refusal leaves the
+        // document exactly as it was.
+        assert_eq!(doc, "vi");
     }
 
     #[test]
@@ -406,7 +457,7 @@ mod tests {
             phase: Phase::Down,
             text: None,
         };
-        apply_outcome(&mut doc, 'x', &outcome(Action::Process, None, Some(enter)));
+        apply(&mut doc, 'x', &outcome(Action::Process, None, Some(enter)));
         assert_eq!(doc, "\n");
     }
 }
