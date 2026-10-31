@@ -47,7 +47,8 @@ bit 9 = Option (`Engine.h:69-74`).
 | --- | --- | --- | --- | --- |
 | Word model | R3 / Backend lane | C-001 | 2 | K-002 |
 | Telex engine: `dd`, doubled vowels, `w`, five tones, removal cycle, restore | R3 / Backend lane | C-002 | 4 | C-001 |
-| Language/enabled state in `Options`, testable headlessly | R3 / Backend lane | C-002, C-013 | (inside C-002) | C-001 |
+| Language/enabled state in `Options`, testable headlessly | R3 / Backend lane | C-002 | (inside C-002) | C-001 |
+| `Options` defaults, JSON schema and migration from upstream settings | R3 / Backend lane | C-013 | 2 (M1 row; not V1-blocking) | C-002 |
 | Event tap, key normalisation, Accessibility onboarding, re-entrancy guard | R7 / FE lane | MAC-001 | 3 | K-008 |
 | Edit emission: backspaces + Unicode | R7 / FE lane | MAC-002 | 3 | MAC-001 |
 | Menu bar item, ⌥Z, state indicator | R7 / FE lane | MAC-004 | 2 | MAC-001, MAC-002 |
