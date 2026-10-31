@@ -146,6 +146,15 @@ jobs:
     # there is nothing to compare, and becomes blocking the moment corpus fixtures
     # exist without a harness to replay them. A calendar deadline here fails every
     # PR in the repo at once, including ones that touched nothing related.
+    #
+    # K-005 turn 3 maps this job to the scope guardrails:
+    #   (1) `parity/scope.txt` decides the judged set; an in-scope case that is
+    #       not judged (pending/invalid) exits 2, so pending never reads green.
+    #   (2) a green run prints `judged / in-scope / skipped` twice — the
+    #       ::warning:: line and the step summary — via scripts/parity.sh.
+    #   (3) the scope declaration is reviewed against the PR's V-PARITY block.
+    #   (4) at C-014 `active:` lists all five blocks, so no skip path remains.
+    # The script always passes parity/scope.txt; a missing file is exit 2.
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

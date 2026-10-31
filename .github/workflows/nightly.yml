@@ -54,6 +54,13 @@ jobs:
 
       # Corpus and fuzzing arrive with K-005 / C-014. Until then this step says so
       # by name rather than passing silently as "nothing to do".
+      #
+      # Scope mapping (K-005 turn 3, seq-110 guardrails): `--full` selects the
+      # file/stream set, never the judged set — the judged set is
+      # `parity/scope.txt` on every run, so an inactive block stays skipped here
+      # too and C-002's merge cannot turn the nightly red. In-scope pending still
+      # exits 2, and a green run prints `judged / in-scope / skipped` in both the
+      # ::warning:: line and the step summary.
       - name: Parity corpus and differential fuzzing
         run: |
           if [ -x scripts/parity.sh ]; then

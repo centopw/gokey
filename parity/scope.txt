@@ -1,0 +1,37 @@
+# Declared parity scope (K-005 turn 3).
+#
+# Every case replayed by scripts/parity.sh must resolve to exactly one block
+# below; a case with no block, or with two blocks at the same specificity, is a
+# corpus defect and `openkey replay --scope` exits 2. A block is *defined* here
+# from day one and *activated* by an `active:` name once its task starts — so
+# nothing silently disappears and a green run can only mean "nothing declared is
+# unjudged".
+#
+# Grammar: `block: <name> <selector>[,<selector>...]`, `#` starts a comment.
+# Selectors, most specific first: an exact id, `id:<glob>`, `file:<path>`
+# (matched as a path suffix). The most specific match decides; ties are errors.
+#
+# `--full` selects the file set, never this set: an inactive block is skipped on
+# every run, nightly included.
+#
+# Active lines are appended one per task and never widened silently:
+#   C-002 telex | C-006 edit | C-003 vni | C-004 simple | C-008 opt
+# C-014 starts with all five active, so the skip path is gone from that merge.
+
+block: telex file:tests/corpus/telex-basic.tsv,file:tests/corpus/telex-tones.tsv,file:tests/corpus/telex-words.tsv,file:tests/corpus/telex-syllables.tsv,file:tests/corpus/telex-clusters.tsv,file:tests/corpus/telex-stops.tsv,file:tests/corpus/telex-tone-cycle.tsv,file:tests/corpus/case-mixed.tsv,telex-aa,telex-dd,telex-aw,telex-vieejt,telex-restore,telex-word-break,telex-delete-passthrough,telex-caps,telex-eng
+
+# The two `case-vni-*` rows live in case-mixed.tsv; an id glob outranks that
+# file selector, so each still resolves to exactly one block.
+block: vni file:tests/corpus/vni-basic.tsv,file:tests/corpus/vni-words.tsv,file:tests/corpus/vni-tones.tsv,id:case-vni-*,vni-vieejt
+
+block: simple file:tests/corpus/simple-telex.tsv,file:tests/corpus/simple-telex-modes.tsv,simple-telex-1
+
+# C-006 is the spelling-check + restore-key task, so its corpus is
+# spelling-boundaries.tsv alongside the editing files that activate with it.
+block: edit file:tests/corpus/editing.tsv,file:tests/corpus/editing-sequences.tsv,file:tests/corpus/spelling-boundaries.tsv
+
+block: opt file:tests/corpus/options.tsv,file:tests/corpus/options-combos.tsv
+
+# Empty at K-005: every case resolves, every block is inactive, so the run
+# reports 311 skipped and exits 0. `active:` names a defined block only.
+active:

@@ -1,0 +1,3 @@
+block: basic file:basic.tsv
+block: ghost id:ghost-*
+active: ghost

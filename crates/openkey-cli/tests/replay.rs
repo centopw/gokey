@@ -15,6 +15,11 @@ struct Run {
 }
 
 fn invoke(args: &[&str]) -> Run {
+    let owned: Vec<String> = args.iter().map(|arg| arg.to_string()).collect();
+    invoke_owned(&owned)
+}
+
+fn invoke_owned(args: &[String]) -> Run {
     let output = Command::new(env!("CARGO_BIN_EXE_openkey"))
         .args(args)
         .output()
@@ -168,5 +173,247 @@ fn a_missing_reference_engine_stops_before_replaying() {
         run.stdout.is_empty(),
         "nothing was replayed:\n{}",
         run.stdout
+    );
+}
+
+// --- scope (K-005 turn 3) -------------------------------------------------
+//
+// These assert the split PA asked for: a run with nothing declared in scope is
+// green (`judged 0 / in-scope 0 / skipped N`), while an in-scope case left
+// unjudged — pending, invalid, or a skipped in-scope row — stays at exit 2.
+// Green means "nothing declared is unjudged", never parity.
+
+fn scoped(args: &[&str], scope: &str) -> Run {
+    let mut owned: Vec<String> = args.iter().map(|arg| arg.to_string()).collect();
+    owned.push("--scope".to_string());
+    owned.push(corpus(scope));
+    invoke_owned(&owned)
+}
+
+#[test]
+fn an_all_inactive_scope_skips_every_case_and_is_green() {
+    let run = scoped(
+        &["replay", "--corpus", &corpus("basic.tsv")],
+        "scope-inactive.txt",
+    );
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(status_of(&run.stdout, "case-one"), Some("SKIP"));
+    assert_eq!(status_of(&run.stdout, "case-two"), Some("SKIP"));
+    assert!(
+        run.stdout
+            .contains("scope: judged 0 / in-scope 0 / skipped 2"),
+        "{}",
+        run.stdout
+    );
+}
+
+#[test]
+fn an_in_scope_pending_case_is_not_green() {
+    let run = scoped(
+        &["replay", "--corpus", &corpus("basic.tsv")],
+        "scope-active.txt",
+    );
+    assert_eq!(run.code, 2, "{}", run.stdout);
+    assert_eq!(status_of(&run.stdout, "case-one"), Some("PENDING"));
+    assert_eq!(status_of(&run.stdout, "case-two"), Some("PENDING"));
+    assert!(
+        run.stdout
+            .contains("scope: judged 0 / in-scope 2 / skipped 0"),
+        "{}",
+        run.stdout
+    );
+}
+
+#[test]
+fn only_active_blocks_are_judged() {
+    let run = scoped(
+        &["replay", "--corpus", &corpus("basic.tsv")],
+        "scope-mixed.txt",
+    );
+    assert_eq!(run.code, 2, "{}", run.stdout);
+    assert_eq!(status_of(&run.stdout, "case-one"), Some("PENDING"));
+    assert_eq!(status_of(&run.stdout, "case-two"), Some("SKIP"));
+    assert!(
+        run.stdout
+            .contains("scope: judged 0 / in-scope 1 / skipped 1"),
+        "{}",
+        run.stdout
+    );
+}
+
+#[test]
+fn an_in_scope_skip_is_still_unjudged() {
+    let run = scoped(
+        &[
+            "replay",
+            "--corpus",
+            &corpus("no-expected.tsv"),
+            "--allow-missing-expected",
+        ],
+        "scope-no-expected.txt",
+    );
+    assert_eq!(
+        run.code, 2,
+        "an in-scope skip is not a verdict:\n{}",
+        run.stdout
+    );
+    // While the engine is a stub this row is PENDING; once C-002 lands it is the
+    // in-scope SKIP judge() produces. Either way it is unjudged, not green.
+    let status = status_of(&run.stdout, "case-three");
+    assert!(
+        status == Some("PENDING") || status == Some("SKIP"),
+        "expected PENDING or SKIP, got {status:?}:\n{}",
+        run.stdout
+    );
+    assert!(
+        run.stdout
+            .contains("scope: judged 0 / in-scope 1 / skipped 0"),
+        "{}",
+        run.stdout
+    );
+}
+
+#[test]
+fn an_unclassified_case_is_exit_two_with_nothing_replayed() {
+    let run = scoped(
+        &["replay", "--corpus", &corpus("basic.tsv")],
+        "scope-unclassified.txt",
+    );
+    assert_eq!(run.code, 2);
+    assert!(run.stderr.contains("not classified"), "{}", run.stderr);
+    assert!(run.stdout.is_empty(), "{}", run.stdout);
+}
+
+#[test]
+fn an_active_block_that_matches_nothing_anywhere_is_exit_two() {
+    let run = invoke(&[
+        "scope",
+        "--scope",
+        &corpus("scope-zero-match.txt"),
+        "--corpus",
+        &corpus("basic.tsv"),
+    ]);
+    assert_eq!(run.code, 2);
+    assert!(run.stderr.contains("matches no case"), "{}", run.stderr);
+    assert!(run.stdout.is_empty(), "{}", run.stdout);
+}
+
+#[test]
+fn an_active_block_may_match_only_some_corpora() {
+    // The global check is what makes this legal: `telex` has a case in
+    // basic.tsv and none in second.tsv, and replaying second.tsv alone must not
+    // call that a broken selector (that per-file error is the regression this
+    // fix removes).
+    let run = invoke(&[
+        "scope",
+        "--scope",
+        &corpus("scope-global.txt"),
+        "--corpus",
+        &corpus("basic.tsv"),
+        "--corpus",
+        &corpus("second.tsv"),
+    ]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+
+    let replay = scoped(
+        &["replay", "--corpus", &corpus("second.tsv")],
+        "scope-global.txt",
+    );
+    assert_eq!(replay.code, 0, "{}", replay.stdout);
+    assert_eq!(status_of(&replay.stdout, "case-four"), Some("SKIP"));
+}
+
+#[test]
+fn a_case_matching_two_blocks_at_one_specificity_is_exit_two() {
+    let run = scoped(
+        &["replay", "--corpus", &corpus("basic.tsv")],
+        "scope-ambiguous.txt",
+    );
+    assert_eq!(run.code, 2);
+    assert!(run.stderr.contains("exactly one block"), "{}", run.stderr);
+    assert!(run.stdout.is_empty(), "{}", run.stdout);
+}
+
+fn played_scripts() -> (PathBuf, Vec<PathBuf>) {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let scope = root.join("parity").join("scope.txt");
+    let mut scripts = vec![root.join("scripts/parity/smoke.tsv")];
+    let corpus_dir = root.join("tests/corpus");
+    let mut files: Vec<PathBuf> = std::fs::read_dir(&corpus_dir)
+        .expect("the corpus directory exists")
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|path| path.extension().is_some_and(|ext| ext == "tsv"))
+        .collect();
+    files.sort();
+    scripts.extend(files);
+    (scope, scripts)
+}
+
+#[test]
+fn the_declared_scope_classifies_every_case_at_the_turn_three_commit() {
+    let (scope, scripts) = played_scripts();
+    assert_eq!(scripts.len(), 19, "18 corpus files + smoke");
+
+    // One global pass over the played set: zero unclassified, exactly one block
+    // per case, and the five-block split this commit expects.
+    let mut args = vec![
+        "scope".to_string(),
+        "--scope".to_string(),
+        scope.display().to_string(),
+    ];
+    for script in &scripts {
+        args.push("--corpus".to_string());
+        args.push(script.display().to_string());
+    }
+    let run = invoke_owned(&args);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(
+        run.stdout
+            .contains("scope: 311 case(s) over 19 corpus file(s)"),
+        "{}",
+        run.stdout
+    );
+    assert!(
+        run.stdout
+            .contains("scope blocks: edit 49, opt 39, simple 27, telex 141, vni 55"),
+        "{}",
+        run.stdout
+    );
+    assert!(run.stdout.contains("active: none"), "{}", run.stdout);
+
+    // And per file, every case is skipped by name while `active:` is empty.
+    let mut skipped = 0usize;
+    for script in &scripts {
+        let replay = invoke_owned(&[
+            "replay".to_string(),
+            "--corpus".to_string(),
+            script.display().to_string(),
+            "--scope".to_string(),
+            scope.display().to_string(),
+        ]);
+        assert_eq!(
+            replay.code,
+            0,
+            "{} is not fully classified by parity/scope.txt: {}",
+            script.display(),
+            replay.stderr
+        );
+        assert!(
+            replay
+                .stdout
+                .contains("scope: judged 0 / in-scope 0 / skipped "),
+            "{}: every block is inactive at turn 3:\n{}",
+            script.display(),
+            replay.stdout
+        );
+        skipped += replay
+            .stdout
+            .lines()
+            .filter(|line| line.starts_with("SKIP "))
+            .count();
+    }
+    assert_eq!(
+        skipped, 311,
+        "300 corpus cases + 11 smoke cases at #29's head (bf5ffcc)"
     );
 }

@@ -1,0 +1,3 @@
+block: telex case-one
+block: vni id:case-*
+active: telex
