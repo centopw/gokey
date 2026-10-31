@@ -1,0 +1,17 @@
+# Backspace, word breaks and punctuation over text the engine has already rewritten.
+# id	method	options	input	expected
+edit-bs-two	telex	-	vieejt\b\b	vi
+edit-bs-retype	telex	-	vieejt\b\bj	vị
+edit-bs-all	telex	-	aa\b\b	-
+edit-bs-three	telex	-	vieejt\b\b\b	v
+edit-break-space	telex	-	aa\sbb	â bb
+edit-break-space2	telex	-	aa\saa	â â
+edit-break-dd	telex	-	dd\s	đ 
+edit-bs-after-break	telex	-	aa\s\b	â
+edit-break-tab	telex	-	vieejt\t	việt\t
+edit-break-enter	telex	-	vieejt\n	việt\n
+edit-bs-plain	telex	-	abc\b	ab
+edit-bs-tone	telex	-	aas\b\b	-
+edit-break-dai	telex	-	ddaif\s	đài 
+edit-punct-dot	telex	-	vieejt.	việt.
+edit-punct-semicolon	telex	-	aa;	â;
