@@ -1,0 +1,20 @@
+# Where the spelling check and the allow-zfwj flag change the answer.
+# id	method	options	input	expected
+# sp-off-zzas: with the check off the s mark lands on an unresolvable cluster; with it on it does not
+sp-off-zzas	telex	no-spelling	zzas	zzá
+sp-on-zzas	telex	spelling	zzas	zzas
+sp-on-xq	telex	spelling	xq	xq
+sp-on-hoc	telex	spelling	hocj	học
+sp-restore-asdf	telex	restore-if-wrong-spelling	asdf	ádf
+sp-restore-viet	telex	restore-if-wrong-spelling	vieejt	việt
+sp-restore-hi	telex	restore-if-wrong-spelling	hij	hị
+sp-temp-off	telex	temp-off-spelling	vieejt	việt
+sp-temp-off-asdf	telex	temp-off-spelling	asdf	ádf
+sp-zfwj-zas-off	telex	-	zas	zas
+# sp-zfwj-zas-on: allow-zfwj is what lets z start a syllable, so the s can land on it
+sp-zfwj-zas-on	telex	allow-zfwj	zas	zá
+# sp-zfwj-jis-on: allow-zfwj is what lets j start a syllable, so the s can land on it.
+# w is not the test, because telex already reads w as ư with the flag off.
+sp-zfwj-jis-off	telex	-	jis	jis
+sp-zfwj-jis-on	telex	allow-zfwj	jis	jí
+sp-restore-xyz	telex	restore-if-wrong-spelling	xyz	xyz

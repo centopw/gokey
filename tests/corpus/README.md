@@ -49,17 +49,19 @@ Status of rules 2 and 3 in v0:
   "wrong" — unbroken English words, `w` never reaching the `qu` shortcut,
   Simple Telex 1's tone placement — are pinned with the engine's actual output
   as `expected` and a comment naming the upstream behaviour. They are recorded,
-  not silenced; adding `xfail:` support is a K-004 follow-up.
-- `openkey-cli replay` exists since K-005 and reports one status per case
-  (`PASS` / `FAIL` / `PENDING` / `SKIP` / `INVALID`) plus a summary, with
-  `--diff ref-engine` adding the reference harness as a second judge. While
-  `Engine::apply` is a stub (`todo!()` until C-002) every case reports
-  `PENDING` and the command exits 2: the port has no document to compare yet,
-  so no agreement is claimed. `scripts/parity.sh` already runs both sides;
-  rule 3 starts holding when C-002 lands, because until then the Rust half
-  judges nothing and the gate exits 2 rather than green.
+  not silenced; adding `xfail:` support stays open and is not part of K-004,
+  which adds coverage rather than judge semantics.
+- `openkey-cli replay` (K-005) reports one status per case (`PASS` / `FAIL` /
+  `PENDING` / `SKIP` / `INVALID`) plus a summary, with `--diff ref-engine`
+  adding the reference harness as a second judge; `scripts/parity.sh` runs both
+  sides. Rule 3 holds from C-002: while `Engine::apply` is a stub (`todo!()`)
+  every case is `PENDING` and the gate exits 2 rather than claiming agreement.
 
 Files: `telex-basic`, `telex-tones`, `telex-words`, `telex-syllables`,
-`vni-basic`, `vni-words`, `simple-telex`, `editing`, `options`.
+`telex-clusters`, `telex-stops`, `telex-tone-cycle`, `vni-basic`, `vni-words`,
+`vni-tones`, `simple-telex`, `simple-telex-modes`, `editing`,
+`editing-sequences`, `options`, `options-combos`, `spelling-boundaries`,
+`case-mixed` — 300 cases, every `expected` column produced by the pinned
+reference harness (`scripts/parity/README.md`), never hand-written.
 
 Owned by: QA/parity engineer (R5). Reviewed by: linguistics reviewer (R11).
