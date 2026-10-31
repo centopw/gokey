@@ -1,6 +1,6 @@
 [package]
 name = "openkey-macos"
-description = "macOS front-end (InputMethodKit / CGEventTap). Empty on non-macOS targets."
+description = "macOS front-end (CGEventTap). Capture logic compiles on every target; only the tap is macOS-only."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
