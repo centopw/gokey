@@ -101,20 +101,23 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0 # full history: a secret removed in a later commit is still leaked
+          # Full history of the refs under test: a secret removed in a later commit is
+          # still leaked. Deliberately not `fetch-depth: 0` plus `git .` — that scans
+          # every fetched branch, so an unmerged commit on someone else's branch fails
+          # this job on a PR that never contained it. The all-refs sweep lives in
+          # `.github/workflows/nightly.yml` (ADR-0009).
+          fetch-depth: 0
       # The CLI rather than gitleaks-action: the action wants a licence secret for
       # organisations, which fork PRs never receive, so it would skip where it matters.
       - name: gitleaks (pinned, checksum-verified)
-        env:
-          GITLEAKS_VERSION: "8.30.1"
-          GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
-        run: |
-          set -euo pipefail
-          curl -sSfL -o /tmp/gitleaks.tgz \
-            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-          echo "${GITLEAKS_SHA256}  /tmp/gitleaks.tgz" | sha256sum -c -
-          tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
-          /tmp/gitleaks git . --config .gitleaks.toml --redact --no-banner --exit-code 1
+        run: scripts/ci/fetch-gitleaks.sh /tmp/gl
+      # Before the scan, not after: the dangerous failure of a secret scanner is a
+      # silent pass, and a config that quietly stopped detecting looks exactly like a
+      # clean tree. Measured on the pinned binary; see docs/adr/0009-secrets-gate-scope.md.
+      - name: Allowlist is as narrow as the ADR says, and the detector still fires
+        run: python3 scripts/ci/test_gitleaks_config.py --gitleaks /tmp/gl/gitleaks
+      - name: Scan the ref under test
+        run: /tmp/gl/gitleaks git . --config .gitleaks.toml --log-opts=HEAD --redact --no-banner --exit-code 1
 
   sbom:
     name: sbom

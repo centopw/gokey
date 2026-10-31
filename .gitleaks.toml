@@ -1,41 +1,77 @@
 # gitleaks configuration — extends the default rules, removes known false positives.
 #
-# Extending rather than replacing: the default ruleset is the point of the job. The
-# only additions here are allowlists for files whose *content* is digests, because a
-# 64-character hex string keyed by a filename trips the generic-api-key heuristic
-# and the finding is a SHA-256 of a source file.
+# Extending rather than replacing: the default ruleset is the point of the job. The only
+# additions here are allowlists for files whose *content* is digests, because a
+# 64-character hex string keyed by a filename trips the generic-api-key heuristic and the
+# finding is a SHA-256 of a source file.
 title = "gokey"
 
 [extend]
 useDefault = true
 
+# Pinned oracle record and its byte-identical copy: only checksum lines are exempt.
+#
+# `condition = "AND"` is what makes this narrow, and it is attached to the two *rules* rather
+# than to the top-level table because the top-level form's meaning depends on how the scan is
+# invoked. Measured on 8.30.1, same fixture and binary, both spellings:
+#
+#   top-level [allowlist] + condition="AND"   `gitleaks dir` -> combined as OR (keys hidden)
+#                                             `gitleaks git` -> AND (keys on other lines shown)
+#   [[rules.allowlists]] + condition="AND"    both modes     -> AND
+#
+# CI runs `git`; a developer or another tool may run `dir`, and a config that answers
+# differently depending on the subcommand is a trap even when the answer CI sees is right.
+# The rule-level form is the same answer in both modes, so the pin files cannot go quiet for
+# whoever runs the other command.
+#
+# Attaching the allowlist to the default rules by id merges into them — the rule bodies are
+# not restated here, so the default regexes and keywords stay upstream's. Every column in
+# both modes is asserted in scripts/ci/test_gitleaks_config.py; the write-up, including this
+# split, is docs/adr/0009-secrets-gate-scope.md.
+#
+# What this buys over a path-only entry: a key on a non-checksum line inside either file
+# is reported, where the path entry hid it.
+#
+# What it costs, and why it is acceptable: a key appended to a checksum line inside a pin
+# file matches both halves and is hidden. It costs a one-sided edit: the two files are
+# byte-identical and `scripts/ci/check-oracle-pin.py` (run by scripts/parity.sh in the
+# blocking `parity` job) exits 1 if they differ, so the key has to be added to both
+# records by hand. Nothing automatic detects it after that — review of a file whose whole
+# purpose is listing digests is the control, which is why the residual is stated here.
+#
+# If the gitleaks pin in `scripts/ci/fetch-gitleaks.sh` moves, re-run
+# `python3 scripts/ci/test_gitleaks_config.py` before trusting a green `secrets` job: the
+# pin is what makes "AND applies here, and the same way in both modes" a stable fact rather
+# than a version quirk.
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "A checksum line inside the pinned oracle record, not a credential"
+condition = "AND"
+regexTarget = "line"
+paths = ['''docs/m0/ORACLE-PIN\.json''', '''parity/oracle/pin\.json''']
+regexes = ['''"[^"]+\.(cpp|h|hpp|mm|m|rs)":\s*"[0-9a-f]{64}"''']
+
+[[rules]]
+id = "github-pat"
+
+[[rules.allowlists]]
+description = "A checksum line inside the pinned oracle record, not a credential"
+condition = "AND"
+regexTarget = "line"
+paths = ['''docs/m0/ORACLE-PIN\.json''', '''parity/oracle/pin\.json''']
+regexes = ['''"[^"]+\.(cpp|h|hpp|mm|m|rs)":\s*"[0-9a-f]{64}"''']
+
+# Bare hash lists: `sha256sum` output is "hash  filename", so there is no quoted
+# filename-then-digest shape for a line regex to anchor on. Nothing to AND against, so the
+# path has to carry it alone — and the entry is defensive rather than demonstrated: a bare
+# `<64-hex>  Engine.cpp` line produces no finding on 8.30.1 even with no allowlist at all
+# (asserted in the same test). A new digest manifest of either shape gets an entry here in
+# review, alongside the file.
 [allowlist]
-description = "Checksum and hash manifests (digests of sources, not credentials)"
-# Paths, and only paths: gitleaks applies an allowlist to the whole finding, so an
-# entry here trusts the file rather than matching its lines. `parity/oracle/pin.json`
-# is byte-identical to `docs/m0/ORACLE-PIN.json` (enforced by
-# `scripts/ci/check-oracle-pin.py`, exit 1 on any difference), so the second entry
-# adds no content to this footprint — it only stops the same reviewed bytes from
-# tripping the rule at a second path, which is what happened when K-003 committed
-# the copy.
-#
-# Maintenance rule: a new digest manifest gets a path here, in review, alongside the
-# file. There is no content-scoped alternative in gitleaks 8.30.1, and two tempting
-# ones were measured and rejected:
-#
-#   - `regexes` alone never fire. They are matched against the *detected secret* —
-#     for generic-api-key, the 64-hex digest with nothing else on it — so a pattern
-#     anchored on the `"File.cpp": "…"` shape cannot match. The entry that used to
-#     sit here was dead code that read as protection.
-#   - `regexTarget = "line"` does make those patterns fire, but the allowlist stays
-#     global: any line carrying a checksum is then allowlisted in every file,
-#     including a real key placed next to one. Probed, and it does hide it.
-#     `condition = "AND"` was the intended fix for that (path AND line), and 8.30.1
-#     ignores it for this purpose: a secret on a non-digest line inside a listed
-#     path is still allowlisted under AND and under OR alike. Probed both ways.
+description = "Bare digest lists (sha256sum output), no line pattern to anchor on"
 paths = [
-  '''docs/m0/ORACLE-PIN\.json''',
-  '''parity/oracle/pin\.json''',
   '''(?i)(^|/)SHA256SUMS$''',
   '''(?i)\.sha256$''',
 ]
