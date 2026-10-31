@@ -50,7 +50,7 @@ testable core.**
 - Auto uppercase first character of a sentence.
 - Convert tool (transcode text between charsets).
 - Settings UI, menu bar control, global enable hotkey.
-- Packaging, code signing/notarisation, signed dmg, vi/en user docs — **macOS only for 1.0**.
+- Packaging and code signing (ad-hoc, no notarisation — DL-027), dmg download with the Gatekeeper bypass documented for users, vi/en user docs — **macOS only for 1.0**.
 - Architecture seams for future AI assist: text-context provider, caret geometry,
   suggestion channel carrying a caret-anchored `range` + `replacement`, accept
   and dismiss events, `ai` settings section — all inert and off in 1.0.

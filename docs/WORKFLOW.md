@@ -139,7 +139,9 @@ Release checklist (all required for `1.x`):
 3. Security review signed off; privacy statement updated.
 4. LICENSE and NOTICE present in every artifact and installer.
 5. Install, upgrade and uninstall tested on a clean machine per OS.
-6. Signing and notarisation verified; checksums published.
+6. Signature verified (`codesign --verify --strict`), the expected `spctl` refusal asserted rather
+   than absent, checksums published, and the Gatekeeper bypass steps present in the release notes
+   and on the download page.
 7. Release notes in Vietnamese and English, including known limitations.
 8. Rollback path documented and tested (previous version reinstall).
 9. Support channel and issue triage owner named for the release window.

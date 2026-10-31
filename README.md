@@ -19,7 +19,7 @@ skeleton.
 
 | Phase | Scope | Status |
 | --- | --- | --- |
-| 1.0 | macOS only: full typing parity, menu bar, settings, signed and notarised dmg | Next |
+| 1.0 | macOS only: full typing parity, menu bar, settings, universal dmg (ad-hoc signed; one-time Gatekeeper bypass documented) | Next |
 | Post-1.0 | Windows, then Linux, on the same unchanged core | Planned |
 | Later | AI assist: inline correction of the word at the caret (Tab accept / Esc dismiss), ghost completion, next-word prediction | Seams only in 1.0 |
 
