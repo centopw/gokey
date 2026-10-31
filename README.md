@@ -90,6 +90,7 @@ for the first green build.
 | `docs/RISKS.md` | Risk register with owners and triggers |
 | `docs/DECISIONS.md` | Decision log, open items blocking milestones |
 | `docs/macos-permissions.md` | Accessibility permission flow, trust states, capture verification |
+| `docs/spelling.md` | Spelling-check rules (`tempDisableKey`) and the restore-key contract |
 | `backlog.csv` | 69 tasks with owners, dependencies, turn estimates and verification recipes |
 | `tests/corpus/README.md` | Parity corpus format and review rules |
 

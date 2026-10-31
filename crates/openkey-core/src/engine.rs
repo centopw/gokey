@@ -726,8 +726,6 @@ impl Engine {
                 {
                     spelling_ok = false;
                 }
-            } else {
-                spelling_ok = true;
             }
         } else {
             spelling_ok = true;
@@ -1676,6 +1674,7 @@ mod tests {
             }
             '0'..='9' => (Key::Digit(ch as u8 - b'0'), false),
             ' ' => (Key::Space, false),
+            '.' => (Key::Dot, false),
             '\t' => (Key::Tab, false),
             '\n' => (Key::Enter, false),
             '\u{8}' => (Key::Backspace, false),
@@ -1790,6 +1789,101 @@ mod tests {
             ..Options::default()
         });
         assert_eq!(type_all(&mut on, "osang"), "óang");
+    }
+
+    #[test]
+    fn the_spelling_check_blocks_a_mark_on_an_invalid_cluster() {
+        // `zz` and `xq` cannot start a syllable, so `checkSpelling` leaves
+        // `tempDisableKey` set and the `s` is inserted raw instead of toning the
+        // word (`Engine.cpp:176-288`, `Engine.cpp:1486`).
+        assert_eq!(type_all(&mut engine(), "zzas"), "zzas");
+        assert_eq!(type_all(&mut engine(), "xq"), "xq");
+
+        // With the check off nothing judges the cluster, so the tone lands.
+        let mut off = Engine::new(Options {
+            check_spelling: false,
+            ..Options::default()
+        });
+        assert_eq!(type_all(&mut off, "zzas"), "zzá");
+    }
+
+    #[test]
+    fn allow_zfwj_changes_whether_z_and_j_can_start_a_syllable() {
+        // Off (the default profile): `z`/`j` are not onset consonants, so the
+        // mark is refused and the key is inserted raw.
+        assert_eq!(type_all(&mut engine(), "zas"), "zas");
+        assert_eq!(type_all(&mut engine(), "jis"), "jis");
+
+        let mut z = Engine::new(Options {
+            allow_consonant_zfwj: true,
+            ..Options::default()
+        });
+        assert_eq!(type_all(&mut z, "zas"), "zá");
+
+        let mut j = Engine::new(Options {
+            allow_consonant_zfwj: true,
+            ..Options::default()
+        });
+        assert_eq!(type_all(&mut j, "jis"), "jí");
+    }
+
+    #[test]
+    fn a_break_key_restores_an_invalid_word_to_its_raw_keys() {
+        // The break branch restores with `vRestoreAndStartNewSession`
+        // (`Engine.cpp:1335-1341`); the raw keys replace the marked word and the
+        // break key itself passes through.
+        let mut engine = Engine::new(Options {
+            restore_if_invalid: true,
+            ..Options::default()
+        });
+        let mut document = String::new();
+        for ch in "asd".chars() {
+            press(&mut engine, &mut document, ch);
+        }
+        assert_eq!(document, "ád");
+
+        let outcome = press(&mut engine, &mut document, '.');
+        assert_eq!(outcome.action, Action::RestoreAndBreak);
+        assert_eq!(document, "asd.");
+        // The engine leaves the restored raw keys in the word; the platform layer
+        // is what starts the new session for this hook code (`OpenKey.mm:492-507`).
+        assert_eq!(engine.word().len(), 3);
+    }
+
+    #[test]
+    fn space_restores_an_invalid_word_before_the_break() {
+        // The space branch restores with `vRestore` (`Engine.cpp:1384-1397`), so
+        // the raw word is emitted and the space follows it.
+        let mut engine = Engine::new(Options {
+            restore_if_invalid: true,
+            ..Options::default()
+        });
+        let mut document = String::new();
+        for ch in "asd".chars() {
+            press(&mut engine, &mut document, ch);
+        }
+        assert_eq!(document, "ád");
+
+        let outcome = press(&mut engine, &mut document, ' ');
+        assert_eq!(outcome.action, Action::Restore);
+        assert_eq!(document, "asd ");
+    }
+
+    #[test]
+    fn the_restore_path_is_off_under_the_default_options() {
+        // `restore_if_invalid` defaults false (the macOS first-run profile), so
+        // the marked word survives and the space passes through untouched.
+        let mut engine = engine();
+        assert!(!engine.options().restore_if_invalid);
+        let mut document = String::new();
+        for ch in "asd".chars() {
+            press(&mut engine, &mut document, ch);
+        }
+        assert_eq!(document, "ád");
+
+        let outcome = press(&mut engine, &mut document, ' ');
+        assert_eq!(outcome.action, Action::Pass);
+        assert_eq!(document, "ád ");
     }
 
     #[test]
