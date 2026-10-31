@@ -49,12 +49,17 @@ Status of rules 2 and 3 in v0:
   "wrong" — unbroken English words, `w` never reaching the `qu` shortcut,
   Simple Telex 1's tone placement — are pinned with the engine's actual output
   as `expected` and a comment naming the upstream behaviour. They are recorded,
-  not silenced; adding `xfail:` support is a K-004 follow-up.
-- `openkey-cli replay` does not exist yet (K-005), so today the corpus is
-  judged against the C++ harness only. Rule 3 starts holding when K-005 lands,
-  and `scripts/parity.sh` is where both runs will meet.
+  not silenced; adding `xfail:` support stays open and is not part of K-004,
+  which adds coverage rather than judge semantics.
+- K-005 adds `openkey-cli replay`, and `scripts/parity.sh` is where both runs
+  meet. Rule 3 holds from C-002: until the port has an engine, every case is
+  `PENDING` and the gate exits 2 rather than claiming agreement.
 
 Files: `telex-basic`, `telex-tones`, `telex-words`, `telex-syllables`,
-`vni-basic`, `vni-words`, `simple-telex`, `editing`, `options`.
+`telex-clusters`, `telex-stops`, `telex-tone-cycle`, `vni-basic`, `vni-words`,
+`vni-tones`, `simple-telex`, `simple-telex-modes`, `editing`,
+`editing-sequences`, `options`, `options-combos`, `spelling-boundaries`,
+`case-mixed` — 300 cases, every `expected` column produced by the pinned
+reference harness (`scripts/parity/README.md`), never hand-written.
 
 Owned by: QA/parity engineer (R5). Reviewed by: linguistics reviewer (R11).

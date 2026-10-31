@@ -1,0 +1,16 @@
+# VNI digits: 1-5 add a tone, 0 removes it, 6/7/8/9 add the vowel and d-stroke marks.
+# id	method	options	input	expected
+# vni-a-0: 0 removes the tone, it does not type a zero
+vni-a-0	vni	-	a10	a
+# vni-a-11: the same tone digit twice types it literally instead of re-applying
+vni-a-11	vni	-	a11	a1
+vni-a-12	vni	-	a12	à
+vni-viet	vni	-	vie6t5	việt
+vni-tieng	vni	-	tie6ng1	tiếng
+vni-duong	vni	-	d9u7o7ng2	đường
+vni-truong	vni	-	tru7o7ng2	trường
+vni-nguoi	vni	-	ngu7o7i2	người
+vni-duoc	vni	-	d9u7o7c5	được
+vni-an	vni	-	a8n1	ắn
+vni-remove-tone	vni	-	vie6t50	viêt
+vni-hoa	vni	-	hoa2	hòa

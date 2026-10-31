@@ -1,0 +1,11 @@
+# Case is per character: the mark takes the case of the vowel, not of the last key.
+# id	method	options	input	expected
+case-viet-mixed	telex	-	vIeejt	vIệt
+case-ddx2	telex	-	dD	đ
+case-vni-viet	vni	-	VIE6T5	VIỆT
+case-vni-viet2	vni	-	Vie65t	Việt
+case-word-sentence	telex	-	Vieejt\sNam	Việt Nam
+# case-caps-mid: the tone glyph takes the case of the vowel it lands on: T is upper, the mark is not
+case-caps-mid	telex	-	vieeJT	việT
+case-dstroke-tone	telex	-	DDas	Đá
+case-uw-caps	telex	-	Uw	Ư

@@ -1,0 +1,21 @@
+# What a second tone key does: it replaces, removes or is typed literally, never stacks.
+# id	method	options	input	expected
+# cyc-a-s-f: f replaces s: a second tone key sets its own tone, it does not stack
+cyc-a-s-f	telex	-	asf	à
+# cyc-a-s-s: typing the same tone key twice removes the mark and keeps the literal key
+cyc-a-s-s	telex	-	ass	as
+cyc-viet-s	telex	-	vieejts	viết
+cyc-viet-ss	telex	-	vieejtss	viêts
+cyc-viet-sz	telex	-	vieejtsz	viêt
+cyc-o-f-r	telex	-	ofr	ỏ
+cyc-o-f-z	telex	-	ofz	o
+cyc-e-x-j	telex	-	exj	ẹ
+cyc-e-x-z	telex	-	exz	e
+cyc-u-r-f	telex	-	urf	ù
+cyc-d-a-s	telex	-	ddas	đá
+cyc-d-a-ss	telex	-	ddass	đas
+# cyc-a-ww: same removal cycle on the vowel mark: the second w is kept literally
+cyc-a-ww	telex	-	aww	aw
+cyc-a-w-z	telex	-	awz	ăz
+# cyc-a-r: r replaces s, like f above
+cyc-a-r	telex	-	asr	ả
