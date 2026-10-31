@@ -51,9 +51,15 @@ Status of rules 2 and 3 in v0:
   as `expected` and a comment naming the upstream behaviour. They are recorded,
   not silenced; adding `xfail:` support stays open and is not part of K-004,
   which adds coverage rather than judge semantics.
-- K-005 adds `openkey-cli replay`, and `scripts/parity.sh` is where both runs
-  meet. Rule 3 holds from C-002: until the port has an engine, every case is
-  `PENDING` and the gate exits 2 rather than claiming agreement.
+- `openkey-cli replay` (K-005) reports one status per case (`PASS` / `FAIL` /
+  `PENDING` / `SKIP` / `INVALID`) plus a summary, with `--diff ref-engine`
+  adding the reference harness as a second judge; `scripts/parity.sh` runs both
+  sides. Every case must be classified by `parity/scope.txt` (K-005 turn 3):
+  a file added without a matching block is exit 2, not a silent skip, and a
+  case in a defined but inactive block is `SKIP` named by block. Rule 3 holds
+  from C-002: while `Engine::apply` is a stub (`todo!()`) an in-scope case is
+  `PENDING` and the gate exits 2 rather than claiming agreement; a green gate
+  means every in-scope case was judged, never that the whole corpus was.
 
 Files: `telex-basic`, `telex-tones`, `telex-words`, `telex-syllables`,
 `telex-clusters`, `telex-stops`, `telex-tone-cycle`, `vni-basic`, `vni-words`,

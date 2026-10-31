@@ -10,9 +10,13 @@ copies.
 
 ```
 ./scripts/parity.sh                       # verify the pin, build, replay everything
+./scripts/parity.sh --full                # same file set; selects streams, not scope
 .oracle/build/harness some.tsv            # replay one script by hand
 python3 scripts/parity/compare.py some.tsv <( \
     .oracle/build/harness some.tsv)       # ...and judge it
+cargo run -p openkey-cli -- replay \
+    --corpus tests/corpus/telex-basic.tsv --scope parity/scope.txt \
+    --diff ref-engine --ref .oracle/build/harness   # judge it with the Rust port
 ```
 
 `parity.sh` verifies the pin first (`scripts/ci/check-oracle-pin.py`), fetches the
@@ -20,7 +24,14 @@ upstream tree by **commit hash** at `parity/oracle/pin.json → upstream.commit`
 if `.oracle/src` is absent, builds with plain `clang++ -std=c++17 -O2 -w`, then
 replays `scripts/parity/smoke.tsv` and every `tests/corpus/*.tsv` it finds. A case
 whose `expected` column is absent is replayed but not judged; a case whose
-`expected` column disagrees fails the script.
+`expected` column disagrees fails the script. After that oracle half, it judges
+the same scripts with the Rust port — see [The Rust judge](#the-rust-judge-k-005).
+
+The oracle half always replays the whole file set. The **judged** set is
+`parity/scope.txt` (see [Scope](#scope-k-005-turn-3)): a block that is defined
+but not active is named and skipped, and an in-scope case that is not judged
+keeps the job non-green. `--full` selects the file/stream set and never the
+judged set — the nightly passes it, and an inactive block stays skipped there.
 
 `parity/oracle/pin.json` is the machine-read copy of the record the decisions are
 argued from, `docs/m0/ORACLE-PIN.json` (PORTING-MAP §5). The two must be the same
@@ -135,5 +146,74 @@ first differing code point), 2 it could not judge — the two files do not line
 up, a case lost its `expected` column, or nothing was compared at all. A script
 whose cases all skip is exit 2, not a green run: the judge is the gate's only
 verdict on the oracle, so "0/0 cases agree" must never be a pass.
-`scripts/parity.sh` propagates 2 as "could not judge" rather than folding it
-into disagreement.
+
+## The Rust judge (K-005)
+
+The oracle half above judges the *baselines*: it says the `.tsv` expected
+column matches the reference engine. It says nothing about the port. `parity.sh`
+therefore runs a second judge over the same scripts:
+
+```
+cargo run -q --locked -p openkey-cli -- replay \
+    --corpus <script> --scope parity/scope.txt \
+    --diff ref-engine --ref .oracle/build/harness
+```
+
+`openkey replay` reports one status per case — `PASS`, `FAIL`, `PENDING`,
+`SKIP`, `INVALID` — then a summary line and a scope line. With `--diff
+ref-engine` the reference harness is a second, independent judge: a case whose
+expected column agrees but whose Rust output differs from the oracle fails with
+class `reference-engine`, and the detail names the first differing code point.
+The gate does not pass `--allow-missing-expected`, so a row that lost its fifth
+field is `INVALID` (a corpus defect, visible), not a silent skip.
+
+Exit status, and why pending is separate from pass:
+
+- `0` — every **in-scope** case was judged and all pass. With `--scope`, a run
+  whose every case is in an inactive block is also `0`: nothing declared is
+  unjudged. That is not parity, and the counts line says so.
+- `1` — at least one judged case fails (expected column or reference engine).
+- `2` — no verdict: an in-scope case was left unjudged (pending, invalid, or a
+  skipped in-scope row), or the build, corpus, scope or reference engine could
+  not run. `parity.sh` prints the state by name
+  (`::error::parity judge: no verdict — …`) instead of folding it into green.
+
+`PENDING` exists because `Engine::apply` is `todo!()` until C-002: the replay
+catches that panic and reports `engine-pending` rather than inventing a
+document. Pending **inside** the declared scope keeps the job at 2 — folding
+unjudged in-scope cases into a green job is the false green this gate is built
+to prevent. Pending **outside** it is `SKIP`, named per case and counted. The
+same contract binds C-014's nightly gate.
+
+## Scope (K-005 turn 3)
+
+`parity/scope.txt` declares which task owns each case. Grammar:
+
+```
+block: <name> <selector>[,<selector>...]
+active: <name>[,<name>...]
+```
+
+Selectors, most specific first: an exact id, `id:<glob>` (`*`, `?`), and
+`file:<path>` (a path suffix, so a fixture may use a bare file name). Every case
+must resolve to exactly one block; two matches at the same specificity are
+ambiguous.
+
+Definition and activation are separate. All five blocks are defined at K-005
+(`telex`, `vni`, `simple`, `edit`, `opt`) so every case resolves and an
+unclassified case is always an error; `active:` starts empty and grows one line
+per task (C-002 `telex`, C-006 `edit`, C-003 `vni`, C-004 `simple`, C-008
+`opt`). At C-014 `active:` lists all five, so no skip path remains.
+
+- A case in an inactive block is `SKIP` with the block name, and is neither
+  replayed nor validated; the oracle half still replays every script, so a
+  malformed row is caught there.
+- An unknown block name or an active block that matches no case is exit 2: a
+  selector that stopped matching must not look like a clean run.
+- A green job prints `judged N / in-scope M / skipped K` twice — the
+  `::warning::` line and `$GITHUB_STEP_SUMMARY` — so green reads as "nothing
+  declared is unjudged", never as parity.
+
+`scripts/parity.sh` propagates the oracle comparator's 2 as "could not judge"
+rather than folding it into disagreement, and treats any judge exit other than
+0/1/2 (a build failure, cargo exit 101) as "could not start".
