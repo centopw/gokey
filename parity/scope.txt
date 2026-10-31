@@ -44,3 +44,8 @@ active: telex
 # C-006 activates `edit`: the editing, editing-sequences and spelling-boundaries
 # files are judged from here on. `telex` and the three later blocks are untouched.
 active: edit
+
+# C-003 activates `vni`: the 55 VNI cases (vni-basic, vni-words, vni-tones, the
+# two `case-vni-*` rows in case-mixed.tsv, and the smoke `vni-vieejt`) are judged
+# from here on. `telex`, `edit` and the two later blocks are untouched.
+active: vni

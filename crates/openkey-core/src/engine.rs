@@ -36,8 +36,8 @@
 //! - A forward delete (`Key::Delete`) has no macOS constant at the pin and is
 //!   not in `_breakCode`; it is modelled as a word break instead of guessed.
 //!
-//! Only the Telex branch is ported (C-002). VNI (C-003) and Simple Telex 1/2
-//! (C-004) panic with `not yet implemented`, which the parity replay reports as
+//! Telex (C-002) and VNI (C-003) are ported; Simple Telex 1/2 (C-004) panic
+//! with `not yet implemented`, which the parity replay reports as
 //! `engine-pending` rather than as a disagreement.
 
 use crate::charset;
@@ -209,11 +209,11 @@ impl Engine {
     /// engine for `keyUp` (`OpenKey.mm:711-714`), so an [`Phase::Up`] event is
     /// passed through untouched here too.
     pub fn apply(&mut self, event: &KeyEvent) -> Outcome {
-        if self.options.input_method != InputMethod::Telex {
-            todo!(
-                "input methods VNI (C-003) and Simple Telex 1/2 (C-004) — \
-                 only Telex (C-002) is ported"
-            );
+        match self.options.input_method {
+            InputMethod::Telex | InputMethod::Vni => {}
+            InputMethod::SimpleTelex1 | InputMethod::SimpleTelex2 => {
+                todo!("Simple Telex 1/2 (C-004) — only Telex (C-002) and VNI (C-003) are ported")
+            }
         }
         if event.phase != Phase::Down {
             return Outcome {
@@ -437,7 +437,7 @@ impl Engine {
             0 => 0,
             len => self.word.code_at(len - 1),
         };
-        if !is_special_key_telex(data) || self.temp_disable_key {
+        if !is_special_key(self.options.input_method, data) || self.temp_disable_key {
             if self.options.quick_telex && is_quick_telex_key(self.word.len(), data, || previous) {
                 self.handle_quick_telex(data);
                 return;
@@ -454,7 +454,7 @@ impl Engine {
         }
 
         // Grammar projection, gated by the free-mark preference (`Engine.cpp:1504`).
-        if !self.options.free_mark && data != KEY_D {
+        if !self.options.free_mark && !is_key_d(self.options.input_method, data) {
             if self.hook.code == DO_NOTHING {
                 self.check_grammar(-1);
             } else {
@@ -1098,7 +1098,7 @@ impl Engine {
                     }
                 } else {
                     self.word.or_bits(i, TONE_MASK);
-                    if code != KEY_D {
+                    if !is_key_d(self.options.input_method, code) {
                         self.word.clear_bits(i, TONEW_MASK);
                     }
                     self.hook.char_data[index - 1 - i] =
@@ -1325,7 +1325,8 @@ impl Engine {
 
     /// `handleMainKey` (`Engine.cpp:1055-1193`).
     fn handle_main_key(&mut self, data: u16) {
-        if data == KEY_Z {
+        let method = self.options.input_method;
+        if is_key_z(method, data) {
             let changed = self.remove_mark();
             if !changed {
                 self.insert_key(data, self.is_caps, true);
@@ -1342,7 +1343,7 @@ impl Engine {
             return;
         }
 
-        if data == KEY_D {
+        if is_key_d(method, data) {
             let mut changed = false;
             for row in consonant_d() {
                 if self.word.len() < row.len() {
@@ -1368,18 +1369,7 @@ impl Engine {
             return;
         }
 
-        if is_mark_key_telex(data) {
-            let mark = if data == KEY_S {
-                MARK1_MASK
-            } else if data == KEY_F {
-                MARK2_MASK
-            } else if data == KEY_R {
-                MARK3_MASK
-            } else if data == KEY_X {
-                MARK4_MASK
-            } else {
-                MARK5_MASK
-            };
+        if let Some(mark) = mark_mask(method, data) {
             for (_, rows) in vowel_for_mark() {
                 self.is_changed = false;
                 let mut correct = false;
@@ -1404,8 +1394,27 @@ impl Engine {
             return;
         }
 
-        // Telex: `keyForAEO` is the pressed key itself (`Engine.cpp:1154`).
-        let key_for_aeo = data;
+        // VNI finds the last O/A/E for `keyForAEO` (`Engine.cpp:1145-1152`);
+        // when none exists the previous `vowelEndIndex` is reused, like
+        // upstream's global.
+        if method == InputMethod::Vni {
+            for i in (0..self.word.len()).rev() {
+                if matches!(self.chr(i), KEY_O | KEY_A | KEY_E) {
+                    self.vowel_end = i as u8;
+                    break;
+                }
+            }
+        }
+        // `keyForAEO` (`Engine.cpp:1154`): the pressed key in Telex; `7`/`8`
+        // stand for W in VNI, and `6` doubles whichever vowel `VEI` points at.
+        let key_for_aeo = match method {
+            InputMethod::Vni => match data {
+                KEY_7 | KEY_8 => KEY_W,
+                KEY_6 => self.chr(self.vowel_end as usize),
+                _ => data,
+            },
+            InputMethod::Telex | InputMethod::SimpleTelex1 | InputMethod::SimpleTelex2 => data,
+        };
         self.is_changed = false;
         for row in vowel(key_for_aeo) {
             if self.word.len() < row.len() {
@@ -1413,9 +1422,29 @@ impl Engine {
             }
             if self.check_correct_vowel(row, data) {
                 self.is_changed = true;
-                if is_key_double_telex(data) {
+                if is_key_double(method, data) {
                     self.insert_aoe(key_for_aeo);
-                } else if data == KEY_W {
+                } else if is_key_w(method, data) {
+                    // `7`/`8` are refused when the vowel they would modify is
+                    // not one they can touch (`Engine.cpp:1170-1178`); the
+                    // digit then passes through because `isChanged` is
+                    // already set and nothing is inserted.
+                    if method == InputMethod::Vni {
+                        for j in (0..self.word.len()).rev() {
+                            if matches!(self.chr(j), KEY_O | KEY_U | KEY_A | KEY_E) {
+                                self.vowel_end = j as u8;
+                                break;
+                            }
+                        }
+                        let vei = self.vowel_end as usize;
+                        if (data == KEY_7
+                            && self.chr(vei) == KEY_A
+                            && (vei == 0 || self.chr(vei - 1) != KEY_U))
+                            || (data == KEY_8 && matches!(self.chr(vei), KEY_O | KEY_U))
+                        {
+                            break;
+                        }
+                    }
                     self.insert_w(key_for_aeo);
                 }
                 break;
@@ -1539,7 +1568,7 @@ impl Engine {
     /// `checkCorrectVowel` (`Engine.cpp:468-499`), which is `Word::tail_matches`
     /// with the caller's mark-key restriction.
     fn check_correct_vowel(&self, row: &[u16], mark_key: u16) -> bool {
-        let restrict_ct = mark_key == KEY_F || mark_key == KEY_X || mark_key == KEY_R;
+        let restrict_ct = is_restricted_end_mark(self.options.input_method, mark_key);
         self.word.tail_matches(
             row,
             self.word.len(),
@@ -1628,6 +1657,13 @@ mod tests {
 
     fn engine() -> Engine {
         Engine::new(Options::default())
+    }
+
+    fn vni_engine() -> Engine {
+        Engine::new(Options {
+            input_method: InputMethod::Vni,
+            ..Options::default()
+        })
     }
 
     fn key(ch: char) -> KeyEvent {
@@ -1730,6 +1766,49 @@ mod tests {
             press(engine, &mut document, ch);
         }
         document
+    }
+
+    #[test]
+    fn vni_digit_keys_render_the_documented_words() {
+        assert_eq!(type_all(&mut vni_engine(), "a6"), "â");
+        assert_eq!(type_all(&mut vni_engine(), "a8"), "ă");
+        assert_eq!(type_all(&mut vni_engine(), "e6"), "ê");
+        assert_eq!(type_all(&mut vni_engine(), "o7"), "ơ");
+        assert_eq!(type_all(&mut vni_engine(), "u7"), "ư");
+        assert_eq!(type_all(&mut vni_engine(), "d9"), "đ");
+        assert_eq!(type_all(&mut vni_engine(), "a1"), "á");
+        assert_eq!(type_all(&mut vni_engine(), "a61"), "ấ");
+        assert_eq!(type_all(&mut vni_engine(), "vie65t"), "việt");
+        assert_eq!(type_all(&mut vni_engine(), "d9uo7c5"), "được");
+        assert_eq!(type_all(&mut vni_engine(), "thu7o7ng"), "thương");
+    }
+
+    #[test]
+    fn vni_digits_type_literally_when_the_reference_does_not_consume_them() {
+        // `7` on a lone `a`, `8` on `o`, a repeated tone digit and `0` with no
+        // mark all fall through to the literal digit (`Engine.cpp:1154-1186`).
+        assert_eq!(type_all(&mut vni_engine(), "a7"), "a7");
+        assert_eq!(type_all(&mut vni_engine(), "o8"), "o8");
+        assert_eq!(type_all(&mut vni_engine(), "a11"), "a1");
+        assert_eq!(type_all(&mut vni_engine(), "a0"), "a0");
+    }
+
+    #[test]
+    fn vni_zero_removes_the_tone_and_six_carries_upper_case() {
+        assert_eq!(type_all(&mut vni_engine(), "a10"), "a");
+        assert_eq!(type_all(&mut vni_engine(), "vie6t50"), "viêt");
+        assert_eq!(type_all(&mut vni_engine(), "A61"), "Ấ");
+    }
+
+    #[test]
+    fn vni_grave_hook_and_tilde_do_not_sit_on_a_c_or_t_ending() {
+        // `2`/`3`/`4` share Telex F/R/X's restriction (`Engine.cpp:488-493`):
+        // on a "c"/"t" ending they stay literal, while acute and dot-below are
+        // accepted. Expected documents from the pinned reference harness.
+        assert_eq!(type_all(&mut vni_engine(), "ac2"), "ac2");
+        assert_eq!(type_all(&mut vni_engine(), "at3"), "at3");
+        assert_eq!(type_all(&mut vni_engine(), "ac1"), "ác");
+        assert_eq!(type_all(&mut vni_engine(), "at5"), "ạt");
     }
 
     #[test]
