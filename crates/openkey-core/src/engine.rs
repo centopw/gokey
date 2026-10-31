@@ -11,21 +11,23 @@
 use crate::event::{KeyEvent, Outcome};
 use crate::options::Options;
 
+pub use crate::word::{Letter, Mark, Word};
+
 /// Per-focus-session typing state, bounded to 32 characters like upstream
 /// `MAX_BUFF`.
 #[derive(Debug)]
 pub struct Engine {
     options: Options,
-    buffer: Vec<char>,
+    word: Word,
 }
 
 impl Engine {
-    pub const MAX_BUFFER: usize = 32;
+    pub const MAX_BUFFER: usize = crate::word::MAX_LETTERS;
 
     pub fn new(options: Options) -> Self {
         Self {
             options,
-            buffer: Vec::with_capacity(Self::MAX_BUFFER),
+            word: Word::new(),
         }
     }
 
@@ -37,14 +39,14 @@ impl Engine {
         self.options = options;
     }
 
-    /// Current word buffer, for tests and the parity harness.
-    pub fn buffer(&self) -> &[char] {
-        &self.buffer
+    /// Current word model, for tests and the parity harness.
+    pub fn word(&self) -> &Word {
+        &self.word
     }
 
     /// Start a new word (upstream `startNewSession`).
     pub fn reset(&mut self) {
-        self.buffer.clear();
+        self.word.clear();
     }
 
     /// Feed one key event.

@@ -10,6 +10,11 @@ Scope: `crates/openkey-core/src`, excluding `#[cfg(test)]` items. Tests may read
 fixtures; banning `std::fs` there would either fail honest tests or push fixtures
 into inline string literals, which is worse than the thing being prevented.
 
+One rule is structural rather than purity: `letters[` may appear only in
+`word.rs` (ADR-0002 D3). `Word` is the only type allowed to index its letter
+array; every other module reads through `get`, so a second indexing site would
+need a second bounds story.
+
 `use` statements are expanded to one fully-qualified path per line before
 matching. Matching raw lines misses the *idiomatic* form rustfmt produces:
 `use std::{fs, net};` contains neither `std::fs` nor `std::net`. Grouped, nested
@@ -197,6 +202,32 @@ def scan_sources() -> list[str]:
     return problems
 
 
+LETTER_INDEX = re.compile(r"\bletters\s*\[")
+LETTER_INDEX_ALLOWED = {"crates/openkey-core/src/word.rs"}
+
+
+def indexes_letters(line: str) -> bool:
+    """True when a logical line indexes the letter array directly."""
+    if line.strip().startswith("//"):
+        return False
+    return LETTER_INDEX.search(line) is not None
+
+
+def scan_letter_indexing() -> list[str]:
+    problems: list[str] = []
+    for path in sorted((CRATE / "src").rglob("*.rs")):
+        rel = path.relative_to(ROOT).as_posix()
+        if rel in LETTER_INDEX_ALLOWED:
+            continue
+        for lineno, line in logical_lines(path.read_text(encoding="utf-8")):
+            if indexes_letters(line):
+                problems.append(
+                    f"::error file={rel},line={lineno}::`letters[` outside word.rs "
+                    f"(ADR-0002 D3: read through `Word::get`): {line.strip()}"
+                )
+    return problems
+
+
 def scan_dependencies() -> list[str]:
     try:
         metadata = json.loads(
@@ -247,7 +278,7 @@ def scan_dependencies() -> list[str]:
 
 
 def main() -> int:
-    problems = scan_sources() + scan_dependencies()
+    problems = scan_sources() + scan_letter_indexing() + scan_dependencies()
     if problems:
         for problem in problems:
             print(problem)
