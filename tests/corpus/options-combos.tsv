@@ -1,7 +1,7 @@
 # Two flags at once: interactions the single-flag rows cannot show.
 # id	method	options	input	expected
-# free-mark has no field in Options until C-013 renames check_grammar; its
-# combos (hoà vs hòa) are deferred to that task rather than pinned as INVALID.
+# free-mark has an Options field since C-013; its corpus combos (hoà vs hòa)
+# belong to C-007's free_mark coverage rather than being pinned here.
 combo-modern-spell	telex	modern-orthography,spelling	hoaf	hoà
 combo-quick-modern	telex	quick-telex,modern-orthography	cc	ch
 combo-quick-nospell	telex	quick-telex,no-spelling	vieejt	việt

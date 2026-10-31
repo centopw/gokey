@@ -6,9 +6,9 @@
 //! the oracle runs unchanged against the port. Unknown flags are errors: a typo
 //! must not silently produce a default-configuration case.
 //!
-//! Two flags are refused rather than guessed: `free-mark` has no field in
-//! `Options` until C-013 renames `check_grammar`, and `send-key-step-by-step` is
-//! not modelled by the reference harness either (`OpenKey.mm:770-782`).
+//! One flag is refused rather than guessed: `send-key-step-by-step` is host
+//! state (`openkey_platform::HostSettings`, ADR-0002 D7), not engine state, and
+//! the reference harness does not model it either (`OpenKey.mm:770-782`).
 
 use openkey_core::{InputMethod, Options};
 
@@ -43,15 +43,12 @@ pub fn options(case: &Case) -> Result<Options, String> {
             "auto-caps-macro" => options.auto_caps_macro = true,
             "upper-case-first" => options.upper_case_first_char = true,
             "temp-off-spelling" => options.temp_off_spelling = true,
-            "free-mark" => {
-                return Err("free-mark is not representable in Options until C-013 \
-                     (check_grammar -> free_mark); no corpus case may request it before then"
-                    .to_string());
-            }
+            "free-mark" => options.free_mark = true,
             "send-key-step-by-step" => {
                 return Err(
-                    "send-key-step-by-step is not modelled, matching the reference harness \
-                     (OpenKey.mm:770-782); no case may request it"
+                    "send-key-step-by-step is host state (openkey_platform::HostSettings), \
+                     not engine state (ADR-0002 D7), and the reference harness does not model \
+                     it (OpenKey.mm:770-782); no case may request it"
                         .to_string(),
                 );
             }
@@ -124,16 +121,9 @@ mod tests {
     }
 
     #[test]
-    fn refuses_flags_the_engine_cannot_represent() {
-        assert!(
-            options(&case("telex", "free-mark"))
-                .unwrap_err()
-                .contains("C-013")
-        );
-        assert!(
-            options(&case("telex", "send-key-step-by-step"))
-                .unwrap_err()
-                .contains("not modelled")
-        );
+    fn maps_free_mark_and_refuses_host_state() {
+        assert!(options(&case("telex", "free-mark")).unwrap().free_mark);
+        let err = options(&case("telex", "send-key-step-by-step")).unwrap_err();
+        assert!(err.contains("host state"), "{err}");
     }
 }

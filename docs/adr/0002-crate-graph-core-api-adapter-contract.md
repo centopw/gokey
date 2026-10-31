@@ -233,6 +233,43 @@ pub struct Outcome {
 - Net field count does not grow: one rename (`check_grammar` → `free_mark`) and
   one deferred move.
 
+### D7a — C-013 settings and migration decisions (recorded)
+
+C-013 implements D6/D7. These are the decisions PORTING-MAP §3.2 requires to be
+recorded rather than implied:
+
+- **Reproduce upstream's stored-value semantics at the migration boundary
+  (DL-013, DL-026).** An absent upstream key reads as `0`, exactly as macOS
+  `integerForKey:` does, including keys introduced in 2.0. A user upgrading from
+  1.x therefore gets `remember_code_per_app = false` and `other_language =
+  false`, which is what upstream macOS does; normalising to GoKey's first-run
+  `true` is rejected as a silent divergence. This is why the upstream store is
+  migrated explicitly instead of being parsed with `#[serde(default)]`.
+- **Two entry points, two profiles.** With no upstream configuration at all,
+  GoKey starts from `Settings::default()`, the `loadDefaultConfig` profile
+  (`AppDelegate.m:288-315`). Migration is only for an existing upstream store.
+- **`free_mark` persistence is refused, not new behaviour.** Upstream never
+  reads `FreeMark` back (`OpenKey.mm:91`, `OpenKey.cpp:83`); the loader restores
+  `false` and reports a stored `1` in `Migration::refused`. 1.0 ships no UI
+  toggle (D6).
+- **`SendKeyStepByStep` moves to `HostSettings` and is read under the key it
+  names.** `loadDefaultConfig` has a copy-paste bug at `AppDelegate.m:301`
+  (writes `vUseMacroInEnglishMode` into that key), but both values are `0` at
+  first run, so the import is unaffected; the bug is not reproduced into GoKey's
+  own writer. The `SwitchKeyStatus` `0 → DEFAULT_SWITCH_STATUS` repair
+  (`AppDelegate.m:397-400`) is the same class and stays host state, unimported.
+- **macOS reset is not macOS first run.** `loadDefaultConfig` omits
+  `vAutoCapsMacro`, so a persisted value survives a reset; the migration
+  preserves it (`tests/fixtures/upstream-macos-reset-kept-autocaps.json`). A
+  genuine first run has no key, which reads `0`.
+- **Windows is recorded, not implemented.** The four-column matrix in
+  PORTING-MAP §3.2 is the specification for the Windows column (declared
+  defaults on read, different reset values); Windows migration lands with M4.
+- **GoKey's own document is versioned.** `schema_version = 1`; a missing or
+  unknown version is refused rather than partially applied, and unknown fields
+  are tolerated in development builds but rejected in release
+  (ARCHITECTURE §8).
+
 ### D8 — Adapter contract
 
 - `Host` and `KeySource` as they exist in `crates/openkey-platform/src/lib.rs` are
@@ -331,3 +368,7 @@ pub struct Outcome {
   that called `core-purity` three-OS coverage corrected to its single
   `ubuntu-24.04` runner (that coverage is `build-test`'s), as R6 required;
   `ARCHITECTURE.md:3` back to "ratified", from `proposed`.
+- 2026-10-31 — D7a added by C-013, recording the persistence/migration decision
+  (absent upstream key = macOS `0`), the `free_mark` refusal, the
+  `HostSettings` move of `send_key_step_by_step`, the reset-vs-first-run
+  difference, and the Windows-column deferral. D6/D7 text unchanged.
