@@ -1,0 +1,23 @@
+{
+  "InputMethod": 1,
+  "InputType": 0,
+  "CodeTable": 0,
+  "Spelling": 1,
+  "QuickTelex": 0,
+  "ModernOrthography": 0,
+  "RestoreIfInvalidWord": 0,
+  "FixRecommendBrowser": 1,
+  "UseMacro": 1,
+  "UseMacroInEnglishMode": 0,
+  "vAutoCapsMacro": 0,
+  "SendKeyStepByStep": 0,
+  "UseSmartSwitchKey": 1,
+  "UpperCaseFirstChar": 0,
+  "vTempOffSpelling": 0,
+  "vAllowConsonantZFWJ": 0,
+  "vQuickStartConsonant": 0,
+  "vQuickEndConsonant": 0,
+  "vTempOffOpenKey": 0,
+  "FreeMark": 1,
+  "SwitchKeyStatus": 0
+}

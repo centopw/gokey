@@ -19,6 +19,12 @@
 
 use openkey_core::{Edit, KeyEvent};
 
+pub mod settings;
+
+pub use settings::{
+    HostSettings, Migration, RefusedSetting, SCHEMA_VERSION, Settings, SettingsError, UpstreamStore,
+};
+
 /// Stable identifier of the focused application, used for per-app mode and
 /// charset memory (upstream `SmartSwitchKey`).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
