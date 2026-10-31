@@ -1,10 +1,12 @@
 # Two flags at once: interactions the single-flag rows cannot show.
 # id	method	options	input	expected
-combo-modern-free	telex	modern-orthography,free-mark	hoaf	hoà
+# free-mark has no field in Options until C-013 renames check_grammar; its
+# combos (hoà vs hòa) are deferred to that task rather than pinned as INVALID.
+combo-modern-spell	telex	modern-orthography,spelling	hoaf	hoà
 combo-quick-modern	telex	quick-telex,modern-orthography	cc	ch
 combo-quick-nospell	telex	quick-telex,no-spelling	vieejt	việt
 combo-upper-modern	telex	upper-case-first,modern-orthography	.\shoaf	. Hoà
-combo-free-trad	telex	free-mark	hoaf	hòa
+combo-upper-nospell	telex	upper-case-first,no-spelling	.\shoaf	. Hòa
 combo-zfwj-quick	telex	allow-zfwj,quick-telex	zz	zz
 combo-modern-upper	telex	modern-orthography,upper-case-first	\nthuys	\nThuý
 combo-start-quick	telex	quick-start-consonant,quick-telex	fa\s	pha 
