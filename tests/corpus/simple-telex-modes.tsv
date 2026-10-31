@@ -1,17 +1,18 @@
-# Simple Telex: the same sequences without the w shortcuts.
+# Simple Telex 2 reads `w` as `ư`; Simple Telex 1 leaves it as a letter. Every
+# row below is an input where the pinned driver returns a different document
+# under simple_telex_1, so the file tests what mode 2 actually changes -- not the
+# mode-2 spelling of a mode-1 case (DL-026).
 # id	method	options	input	expected
-simple-aa	simple_telex_1	-	aa	â
-simple-ee	simple_telex_1	-	ee	ê
-simple-oo	simple_telex_1	-	oo	ô
-simple-dd	simple_telex_1	-	dd	đ
-simple-hocj	simple_telex_1	-	hocj	học
-simple-nois	simple_telex_1	-	nois	nói
-simple-vieejt	simple_telex_1	-	vieejt	việt
-simple-tieengs	simple_telex_1	-	tieengs	tiếng
-simple-tooi	simple_telex_1	-	tooi	tôi
-# Simple Telex 1 places the tone inside `uo` differently from Telex: `nguoif`
-# is `nguòi` here, not `người`. Recorded as the engine behaves (DL-026).
-simple-khoe	simple_telex_1	-	khoer	khỏe
-simple-duoc	simple_telex_1	-	dduwowcj	được
-simple-nguoi	simple_telex_1	-	nguoif	nguòi
-simple2-duoc	simple_telex_2	-	dduwowcj	được
+simple2-w	simple_telex_2	-	w	ư
+simple2-wa	simple_telex_2	-	wa	ưa
+simple2-wo	simple_telex_2	-	wo	ưo
+simple2-wos	simple_telex_2	-	wos	ứo
+simple2-wn	simple_telex_2	-	wn	ưn
+simple2-wng	simple_telex_2	-	wng	ưng
+simple2-wow	simple_telex_2	-	wow	ươ
+simple2-wows	simple_telex_2	-	wows	ướ
+simple2-wowf	simple_telex_2	-	wowf	ườ
+simple2-wowcj	simple_telex_2	-	wowcj	ược
+simple2-wowng	simple_telex_2	-	wowng	ương
+simple2-twow	simple_telex_2	-	twow	tươ
+simple2-ww	simple_telex_2	-	ww	w
