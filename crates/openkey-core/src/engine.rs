@@ -5,27 +5,32 @@
 //! triple so the parity harness can diff it against the reference C++ build.
 //!
 //! Upstream encodes tone/mark/caps flags in the high bits of `Uint32 charData`
-//! (`CAPS_MASK`, `TONE_MASK`, `MARK1_MASK`, ...). The port keeps a typed word
-//! model instead, with a `legacy` compatibility shim only if parity requires it.
+//! (`DataType.h:92-122`). The port keeps the typed [`Word`] model instead; see
+//! [`crate::word`] for the bit layout that survives only as a reasoning aid.
 
 use crate::event::{KeyEvent, Outcome};
 use crate::options::Options;
+pub use crate::word::{Letter, Mark, Word};
+
+use crate::word::MAX_LETTERS;
 
 /// Per-focus-session typing state, bounded to 32 characters like upstream
-/// `MAX_BUFF`.
+/// `MAX_BUFF` (`DataType.h:19`).
 #[derive(Debug)]
 pub struct Engine {
     options: Options,
-    buffer: Vec<char>,
+    word: Word,
 }
 
 impl Engine {
-    pub const MAX_BUFFER: usize = 32;
+    /// Upstream `MAX_BUFF`; alias of [`MAX_LETTERS`] for callers that used the
+    /// scaffold's name.
+    pub const MAX_BUFFER: usize = MAX_LETTERS;
 
     pub fn new(options: Options) -> Self {
         Self {
             options,
-            buffer: Vec::with_capacity(Self::MAX_BUFFER),
+            word: Word::new(),
         }
     }
 
@@ -37,14 +42,17 @@ impl Engine {
         self.options = options;
     }
 
-    /// Current word buffer, for tests and the parity harness.
-    pub fn buffer(&self) -> &[char] {
-        &self.buffer
+    /// Current word, for tests and the parity harness.
+    ///
+    /// Rendering it needs the charset tables (C-005); until they land, read it
+    /// through [`Word::get`]/[`Word::len`].
+    pub fn buffer(&self) -> &Word {
+        &self.word
     }
 
-    /// Start a new word (upstream `startNewSession`).
+    /// Start a new word (upstream `startNewSession`, `Engine.cpp:457`).
     pub fn reset(&mut self) {
-        self.buffer.clear();
+        self.word.clear();
     }
 
     /// Feed one key event.

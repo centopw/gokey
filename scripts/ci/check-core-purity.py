@@ -10,6 +10,12 @@ Scope: `crates/openkey-core/src`, excluding `#[cfg(test)]` items. Tests may read
 fixtures; banning `std::fs` there would either fail honest tests or push fixtures
 into inline string literals, which is worse than the thing being prevented.
 
+One invariant here is not about I/O: `Word::letters` may be indexed only inside
+`word.rs` (ADR-0002 D3). That scan reads physical lines *including* test modules,
+because a test outside `word.rs` is exactly as unentitled to the field as engine
+code — so it does not use `logical_lines()`, whose `#[cfg(test)]` exclusion exists
+for the I/O rules.
+
 `use` statements are expanded to one fully-qualified path per line before
 matching. Matching raw lines misses the *idiomatic* form rustfmt produces:
 `use std::{fs, net};` contains neither `std::fs` nor `std::net`. Grouped, nested
@@ -197,6 +203,37 @@ def scan_sources() -> list[str]:
     return problems
 
 
+WORD_INDEX = re.compile(r"\bletters\s*\[")
+
+
+def word_index_offences(source: str) -> list[int]:
+    """Line numbers in `source` that index `Word::letters` (ADR-0002 D3).
+
+    Physical lines, not `logical_lines()`: test modules count too, and there is
+    no `use` tree here to expand.
+    """
+    return [
+        lineno
+        for lineno, line in enumerate(source.splitlines(), start=1)
+        if not line.strip().startswith("//") and WORD_INDEX.search(line)
+    ]
+
+
+def scan_word_encapsulation() -> list[str]:
+    """`Word::letters` is indexed only by the module that owns it."""
+    problems: list[str] = []
+    for path in sorted((CRATE / "src").rglob("*.rs")):
+        if path.name == "word.rs":
+            continue
+        rel = path.relative_to(ROOT)
+        for lineno in word_index_offences(path.read_text(encoding="utf-8")):
+            problems.append(
+                f"::error file={rel},line={lineno}::`letters[` indexed outside word.rs; "
+                "read the word through get()/span() (ADR-0002 D3)"
+            )
+    return problems
+
+
 def scan_dependencies() -> list[str]:
     try:
         metadata = json.loads(
@@ -247,7 +284,7 @@ def scan_dependencies() -> list[str]:
 
 
 def main() -> int:
-    problems = scan_sources() + scan_dependencies()
+    problems = scan_sources() + scan_word_encapsulation() + scan_dependencies()
     if problems:
         for problem in problems:
             print(problem)

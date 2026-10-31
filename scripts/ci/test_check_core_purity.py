@@ -96,5 +96,42 @@ class BannedConstructs(unittest.TestCase):
         self.assertEqual(flagged(source), set())
 
 
+class WordEncapsulation(unittest.TestCase):
+    """ADR-0002 D3: `Word::letters` is indexed only in `word.rs`."""
+
+    def test_direct_indexing_is_flagged(self) -> None:
+        self.assertEqual(scanner.word_index_offences("self.letters[i] = l;\n"), [1])
+        self.assertEqual(scanner.word_index_offences("let l = w.letters [ 0 ];\n"), [1])
+
+    def test_comment_is_not_code(self) -> None:
+        self.assertEqual(
+            scanner.word_index_offences("// letters[0] lives in word.rs\n"), []
+        )
+
+    def test_field_access_without_indexing_is_out_of_scope(self) -> None:
+        # Only indexing is banned. Reading the length cannot smuggle a letter
+        # out, and flagging it would make the rule about the field name rather
+        # than about the layout escaping its owner.
+        self.assertEqual(scanner.word_index_offences("let n = self.letters.len();\n"), [])
+
+    def test_test_modules_are_scanned_too(self) -> None:
+        # `logical_lines()` drops `#[cfg(test)]` items for the I/O rules; this
+        # scan must not, because a test outside `word.rs` is equally unentitled
+        # to index the field (the scanner's docstring says so).
+        source = (
+            "#[cfg(test)]\nmod tests {\n    fn t(w: &Word) { let _ = w.letters[0]; }\n}\n"
+        )
+        self.assertEqual(scanner.word_index_offences(source), [3])
+
+    def test_line_numbers_are_reported(self) -> None:
+        source = "fn a() {}\n\nfn b(w: &Word) -> Letter { w.letters[1] }\n"
+        self.assertEqual(scanner.word_index_offences(source), [3])
+
+    def test_this_repository_is_clean(self) -> None:
+        # The gate against the real tree: a future commit that indexes the
+        # field outside `word.rs` fails here with its file and line.
+        self.assertEqual(scanner.scan_word_encapsulation(), [])
+
+
 if __name__ == "__main__":
     unittest.main()
