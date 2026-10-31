@@ -301,6 +301,17 @@ recorded rather than implied:
   this ADR (dated, not a new file) plus a corpus note if behaviour moves
   (DL-011). After C-017, it is a semver decision, not an ADR amendment.
 
+### D10a — C-002 amendment (2026-10-31): `Engine::session_break`
+
+C-002 adds one method to `Engine`, a D2 type: `session_break()` (`engine.rs:187`).
+ADR-0011 decides it as the mouse/session entry: it dispatches the upstream break
+branch with a synthetic mouse-down, clears `is_caps`, and returns the `Outcome`
+the adapter discards. The change is additive — no D2 symbol changes shape and the
+D2 re-export list is unchanged, because the method lives on the already
+re-exported `Engine`. No corpus note (DL-011): the mouse path has no corpus case,
+since the harness is character-driven. C-017 must list `session_break` in the
+frozen D2 surface.
+
 ## Alternatives considered
 
 | Alternative | Why rejected |
@@ -372,3 +383,8 @@ recorded rather than implied:
   (absent upstream key = macOS `0`), the `free_mark` refusal, the
   `HostSettings` move of `send_key_step_by_step`, the reset-vs-first-run
   difference, and the Windows-column deferral. D6/D7 text unchanged.
+- 2026-10-31 — D10a added by C-002 under D10: `Engine::session_break()`, a method
+  on the D2 `Engine` type specified by ADR-0011, recorded as an additive
+  amendment — no existing symbol changes, the D2 re-export list is unchanged, and
+  no corpus note applies because the mouse path has no harness case. The C-017
+  freeze must include `session_break` in the frozen surface.

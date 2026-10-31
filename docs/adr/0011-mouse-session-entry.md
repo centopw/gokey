@@ -1,6 +1,7 @@
 # ADR-0011 — Mouse and session entry: `Engine::session_break`, not `Phase`, not `reset()`
 
-- **Status**: proposed (2026-10-31)
+- **Status**: accepted (2026-10-31) — `VERDICT: APPROVE` at `8a26b67`, review
+  5722226254 (https://github.com/centopw/gokey/pull/33#pullrequestreview-5722226254)
 - **Date**: 2026-10-31
 - **Author**: R2 (backend)
 - **Task**: C-002 (engine), consumed by MAC-002 (macOS adapter)
@@ -74,12 +75,14 @@ keystroke and nothing else. `Engine::reset()` remains the public alias of
    `break_branch`: no quick-consonant check, no `restore_if_invalid` check, no
    `special_char`/`typing_states` handling, no macro-break bookkeeping. The two are not
    interchangeable, and the difference is typing behaviour, which DL-013 forbids shipping.
-4. **Keep the sync key adapter-side, and clear it only for double-byte charsets.**
+4. **Keep the sync key adapter-side, and clear it only for the double-byte charsets.**
    `session_break()` does not touch it. MAC-002 clears its `_syncKey` equivalent for
-   `Charset` values 2 and 3 (VNI-Windows, Unicode Compound), exactly as
-   `IS_DOUBLE_CODE` does, and leaves it alone for Telex/Simple Telex on Unicode. Today
-   `Options::charset` is `Charset::Unicode` only (the other tables are C-005), so the
-   rule is written now so it is not reinvented when those tables land.
+   `Charset::VniWindows | Charset::UnicodeCompound` — those two variants and no others,
+   exactly as `IS_DOUBLE_CODE` does — and leaves it alone for Telex/Simple Telex on
+   Unicode. The predicate is written by variant, not by number (`Charset`'s declaration
+   order makes VNI-Windows `2` and Unicode Compound `3` today, but a later enum edit
+   would silently break a numeric match). MAC-002 pins the rule with the variant
+   predicate, not an end-to-end typing case: only Unicode is ported until C-005.
 5. **Do not restore caps across the click.** `session_break()` clears `is_caps`; the
    adapter must not re-apply a remembered shift state to the first character after the
    click.
