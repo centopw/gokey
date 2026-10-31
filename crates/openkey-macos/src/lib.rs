@@ -1,15 +1,43 @@
-//! macOS front-end.
+//! macOS front-end: the capture half of ADR-0004
+//! (`docs/adr/0004-macos-adapter.md`).
 //!
-//! Adapter design is pending ADR-0004 (timeboxed spike M-001): CGEventTap plus
-//! an Accessibility permission prompt, versus a real InputMethodKit input
-//! source. The event-tap route reproduces upstream behaviour (it is how the
-//! original avoids the marked-text underline bug); InputMethodKit integrates
-//! better with the system input-source switcher but forces marked text.
+//! One active `CGEventTap` at the HID location, upstream's event mask minus
+//! key-up, the adapter-owned keycode table, the Accessibility trust state and
+//! the re-entrancy guard. Emission is MAC-002; the ⌥Z toggle and the menu-bar
+//! indicator are MAC-004.
 //!
-//! This crate compiles to an empty library on non-macOS targets so the
-//! workspace builds on every CI runner.
-
-#![cfg(target_os = "macos")]
+//! # Layout
+//!
+//! `openkey-core` never sees a macOS keycode, so the translation and decision
+//! logic lives here in modules that compile on **every** target — `keymap`,
+//! `capture`, `trust`, `engine_host`. Only [`tap`] (FFI and the run loop) is
+//! macOS-only. CI therefore exercises the parts where a mistake becomes a typing
+//! bug on all three runners, not only on the macOS one.
+//!
+//! # Two guarantees the crate enforces
+//!
+//! - **Nothing is swallowed until emission exists.**
+//!   [`engine_host::Reaction::swallows`] is `false` for every arm, so a captured
+//!   event is always delivered. A keyboard that eats input is worse than no
+//!   keyboard; MAC-002 flips the edit arm and keeps the test that pins the rest.
+//! - **An engine fault passes the key through.** `Engine::apply` runs under
+//!   `catch_unwind`; a panic disables the engine for the rest of the process
+//!   instead of being retried once per keystroke, and every key is delivered
+//!   unchanged with a loud message on stderr.
+//!
+//! The second relies on unwinding, so the workspace must not set
+//! `panic = "abort"` (it does not).
 
 pub use openkey_core as core;
 pub use openkey_platform as platform;
+
+pub mod capture;
+pub mod engine_host;
+pub mod keymap;
+#[cfg(target_os = "macos")]
+pub mod tap;
+pub mod trust;
+
+/// The event mask the tap installs, for callers that need to print it. Defined
+/// in [`capture`] so the list and the bitmask cannot drift.
+pub const EVENT_MASK: u64 = capture::MASK;
