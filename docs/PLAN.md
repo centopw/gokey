@@ -22,19 +22,26 @@ Rules:
 ## 2. Milestones and turn budgets
 
 Budgets include a 15% fix reserve. They are estimates, revised at each gate from
-actual turns spent.
+actual turns spent. M1's re-cut shows its task, review and governance lines
+separately under DL-034.
 
 | Milestone | Turns | Content | Exit criteria (gate) |
 | --- | --- | --- | --- |
 | **M0 Bootstrap** | 20 | Repo, CI, reference harness, corpus v0, ADRs, adapter spike, licensing | G0: builds on 3 OSes; ref harness replays a script; >=300 corpus cases; macOS adapter decision; LICENSE/NOTICE in repo; charter approved |
-| **M1 Core parity** | 51 | Port Telex, VNI, Simple Telex, charsets, spelling/grammar, macros, smart switch, convert, options; define AI seams with a caret-anchored span | G1: >=99.5% agreement on >=2000 cases, 100% documented examples; core p99 <= 0.5 ms; API frozen; zero `unsafe` in core; context/suggestion traits compile with no AI dependency |
+| **M1 Core parity** | 87 | Port Telex, VNI, Simple Telex, charsets, spelling/grammar, macros, smart switch, convert, options; define AI seams with a caret-anchored span | G1: >=99.5% agreement on >=2000 cases, 100% documented examples; core p99 <= 0.5 ms; API frozen; zero `unsafe` in core; context/suggestion traits compile with no AI dependency |
 | **M2 macOS alpha** | 24 | Event tap adapter, focus tracking, menu bar, settings, ad-hoc signed universal dmg (DL-027, DL-030) | G2: installs on a clean macOS 13+ machine after the documented Gatekeeper bypass; an update installed over the previous build keeps the Accessibility grant; >=1,000 dogfood sessions; compat matrix documented |
 | **M3 macOS 1.0** | 21 | Hardening, external beta, auto-update, docs, dmg download release (DL-027) | G3: 1.0.0 published for macOS and installable from the download page after the documented Gatekeeper bypass; crash-free >=99.9% over 1,000 dogfood sessions; security sign-off; zero network calls outside the update check |
 | **M4 Windows** | 21 | Hook capture, SendInput emission, tray + dialog, signed MSI | G4: signed installer; compat matrix (Office, browsers, IDEs, terminals); no AV false positive on the reference set |
 | **M5 Linux** | 18 | IBus engine, preedit strategy, packaging, desktop matrix | G5: types Vietnamese in GTK and Qt apps on GNOME and KDE; deb + rpm install cleanly on Ubuntu 24.04 and Fedora |
 | **M6 AI assist** | 49 | Inline correction (caret-anchored span, Tab/Esc), suggestion overlay, ghost completion, next-word prediction, evaluation, privacy gate | G6: correction precision >=95% with dismissal behaviour measured; completion acceptance rate measured; privacy review passed; no core or keystroke-path dependency |
 
-1.0 is M0–M3: **116 turns**. M4–M6 are post-1.0 and run outside that budget.
+1.0 is M0–M3: **152 turns**. M4–M6 are post-1.0 and run outside that budget.
+
+M1 was re-cut from 51 to **87** on 2026-10-31 (DL-034): `44 task + 1.83 × 20 =
+36.6 → 37 review + 6 governance`. The review line comes from M0's measured rate
+and the 20 M1 PRs in `backlog.csv`; the +36 turns move the 1.0 total from 116 to
+152. The sponsor approved 68 before the correction; the 19-turn increase to 87 is
+reported to him and his answer is outstanding. M2 and M3 are unchanged in this PR.
 
 Calendar dates are derived for humans when asked; they are never tracked. If a
 date and a gate disagree, the gate wins.
