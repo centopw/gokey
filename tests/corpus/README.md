@@ -55,8 +55,9 @@ Status of rules 2 and 3 in v0:
   `--diff ref-engine` adding the reference harness as a second judge. While
   `Engine::apply` is a stub (`todo!()` until C-002) every case reports
   `PENDING` and the command exits 2: the port has no document to compare yet,
-  so no agreement is claimed. Rule 3 starts holding when C-002 lands and
-  `scripts/parity.sh` is wired to run both sides.
+  so no agreement is claimed. `scripts/parity.sh` already runs both sides;
+  rule 3 starts holding when C-002 lands, because until then the Rust half
+  judges nothing and the gate exits 2 rather than green.
 
 Files: `telex-basic`, `telex-tones`, `telex-words`, `telex-syllables`,
 `vni-basic`, `vni-words`, `simple-telex`, `editing`, `options`.

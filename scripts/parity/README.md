@@ -13,6 +13,9 @@ copies.
 .oracle/build/harness some.tsv            # replay one script by hand
 python3 scripts/parity/compare.py some.tsv <( \
     .oracle/build/harness some.tsv)       # ...and judge it
+cargo run -p openkey-cli -- replay \
+    --corpus tests/corpus/telex-basic.tsv \
+    --diff ref-engine --ref .oracle/build/harness   # judge it with the Rust port
 ```
 
 `parity.sh` verifies the pin first (`scripts/ci/check-oracle-pin.py`), fetches the
@@ -20,7 +23,8 @@ upstream tree by **commit hash** at `parity/oracle/pin.json → upstream.commit`
 if `.oracle/src` is absent, builds with plain `clang++ -std=c++17 -O2 -w`, then
 replays `scripts/parity/smoke.tsv` and every `tests/corpus/*.tsv` it finds. A case
 whose `expected` column is absent is replayed but not judged; a case whose
-`expected` column disagrees fails the script.
+`expected` column disagrees fails the script. After that oracle half, it judges
+the same scripts with the Rust port — see [The Rust judge](#the-rust-judge-k-005).
 
 `parity/oracle/pin.json` is the machine-read copy of the record the decisions are
 argued from, `docs/m0/ORACLE-PIN.json` (PORTING-MAP §5). The two must be the same
@@ -135,5 +139,41 @@ first differing code point), 2 it could not judge — the two files do not line
 up, a case lost its `expected` column, or nothing was compared at all. A script
 whose cases all skip is exit 2, not a green run: the judge is the gate's only
 verdict on the oracle, so "0/0 cases agree" must never be a pass.
-`scripts/parity.sh` propagates 2 as "could not judge" rather than folding it
-into disagreement.
+
+## The Rust judge (K-005)
+
+The oracle half above judges the *baselines*: it says the `.tsv` expected
+column matches the reference engine. It says nothing about the port. `parity.sh`
+therefore runs a second judge over the same scripts:
+
+```
+cargo run -q --locked -p openkey-cli -- replay \
+    --corpus <script> --diff ref-engine --ref .oracle/build/harness
+```
+
+`openkey replay` reports one status per case — `PASS`, `FAIL`, `PENDING`,
+`SKIP`, `INVALID` — then a summary line. With `--diff ref-engine` the reference
+harness is a second, independent judge: a case whose expected column agrees but
+whose Rust output differs from the oracle fails with class `reference-engine`,
+and the detail names the first differing code point. The gate does not pass
+`--allow-missing-expected`, so a row that lost its fifth field is `INVALID`
+(a corpus defect, visible), not a silent skip.
+
+Exit status, and why pending is separate from pass:
+
+- `0` — every case was judged and all pass.
+- `1` — at least one judged case fails (expected column or reference engine).
+- `2` — no verdict: any case was left unjudged (all pending, a partial run, a
+  corpus defect), or the build, corpus or reference engine could not run.
+  `parity.sh` prints the state by name
+  (`::error::parity judge: no verdict — …`) instead of folding it into green.
+
+`PENDING` exists because `Engine::apply` is `todo!()` until C-002: the replay
+catches that panic and reports `engine-pending` rather than inventing a
+document. A run that is all-pending exits 2 on purpose — folding 189 unjudged
+cases into a green job is the false green this gate is built to prevent. The
+same contract binds C-014's nightly gate.
+
+`scripts/parity.sh` propagates the oracle comparator's 2 as "could not judge"
+rather than folding it into disagreement, and treats any judge exit other than
+0/1/2 (a build failure, cargo exit 101) as "could not start".
