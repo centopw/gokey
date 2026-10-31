@@ -108,12 +108,46 @@ pub enum Action {
     RestoreAndBreak,
 }
 
+/// The text an [`Edit`] inserts, in the active charset (ADR-0002 D4).
+///
+/// Four of the five charsets upstream supports are byte-oriented and do not
+/// round-trip through UTF-8, so a `String` cannot carry them; the fifth,
+/// Unicode Compound, needs a second code unit for the combining mark. The
+/// variant is decided by `Options.charset` alone — no adapter holds a charset
+/// table — so two adapters cannot disagree about what TCVN3 means.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Encoded {
+    /// Unicode and Unicode Compound: UTF-16 code units, ready for the platform
+    /// to send, combining marks included.
+    Utf16(Vec<u16>),
+    /// TCVN3, VNI-Windows and CP1258: the charset's bytes, in order.
+    Bytes(Vec<u8>),
+}
+
+impl Encoded {
+    /// No characters to insert.
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Encoded::Utf16(units) => units.is_empty(),
+            Encoded::Bytes(bytes) => bytes.is_empty(),
+        }
+    }
+}
+
+impl Default for Encoded {
+    /// An empty `Utf16`: the variant with no payload, so `Edit::default()` means
+    /// "delete nothing, insert nothing".
+    fn default() -> Self {
+        Encoded::Utf16(Vec::new())
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Edit {
     /// Characters to delete before inserting `text`.
     pub backspaces: u8,
     /// Text to insert, already encoded in the active charset.
-    pub text: String,
+    pub text: Encoded,
     /// Play the system beep (invalid-word feedback).
     pub beep: bool,
 }

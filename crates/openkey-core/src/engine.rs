@@ -41,7 +41,7 @@
 //! `engine-pending` rather than as a disagreement.
 
 use crate::charset;
-use crate::event::{Action, Edit, Ext, KeyEvent, Outcome, Phase};
+use crate::event::{Action, Edit, Encoded, Ext, KeyEvent, Outcome, Phase};
 use crate::options::{InputMethod, Options};
 use crate::tables::*;
 use crate::word::{MAX_LETTERS, Scan};
@@ -1599,21 +1599,15 @@ impl Engine {
         }
     }
 
-    /// `charData[0..newCharCount]` emitted last-to-first
+    /// `charData[0..newCharCount]` rendered in the active charset
     /// (`OpenKey.mm:423-480`, harness `emitUnits`).
-    fn edit_text(&self) -> String {
-        let mut text = String::new();
-        for i in (0..usize::from(self.hook.new_chars)).rev() {
-            let entry = self.hook.char_data[i];
-            let ch = charset::character(entry).unwrap_or_else(|| {
-                panic!(
-                    "charData[{i}] = 0x{entry:x} is a keycode with no character; \
-                     the hook would emit a NUL (OpenKey.mm:449)"
-                )
-            });
-            text.push(ch);
-        }
-        text
+    ///
+    /// `charData` holds the last character at index 0 (the hook writes
+    /// `charData[_index - 1 - i]`), so [`charset::render`] walks it backwards and
+    /// returns the units in reading order.
+    fn edit_text(&self) -> Encoded {
+        let entries = &self.hook.char_data[..usize::from(self.hook.new_chars)];
+        charset::render(entries, self.options.charset)
     }
 }
 
@@ -1710,7 +1704,12 @@ mod tests {
                 let keep = document.chars().count().saturating_sub(backspaces);
                 *document = document.chars().take(keep).collect();
             }
-            document.push_str(&edit.text);
+            match &edit.text {
+                Encoded::Utf16(units) => document.push_str(&String::from_utf16_lossy(units)),
+                // Every test here types in the default Unicode charset; a byte
+                // edit would mean the engine ignored `Options::charset`.
+                Encoded::Bytes(_) => panic!("byte-charset edit in a Unicode document model"),
+            }
         }
         match outcome.action {
             Action::Pass | Action::BreakWord => {
@@ -1837,16 +1836,33 @@ mod tests {
 
     #[test]
     fn charset_choice_reaches_the_edit_text() {
-        // Only Unicode is ported (C-005 adds the rest); this pins that the
-        // engine asks the charset layer rather than hard-coding code points.
-        let mut engine = Engine::new(Options {
-            charset: Charset::Unicode,
-            ..Options::default()
-        });
-        let outcome = engine.apply(&key('a'));
-        assert_eq!(outcome.action, Action::Pass);
-        let outcome = engine.apply(&key('s'));
-        assert_eq!(outcome.action, Action::Process);
-        assert_eq!(outcome.edit.unwrap().text, "á");
+        // D4: the engine encodes at its edge, so `Options::charset` alone
+        // decides the emitted units. `as` produces one edit, `á` — the A row's
+        // sắc column in each of the five tables (`Vietnamese.cpp:411-491`) —
+        // and the render differs per charset exactly as `SendNewCharString`
+        // does (`OpenKey.mm:452-475`).
+        let typing = |charset: Charset| {
+            let mut engine = Engine::new(Options {
+                charset,
+                ..Options::default()
+            });
+            engine.apply(&key('a'));
+            engine
+                .apply(&key('s'))
+                .edit
+                .expect("s tones the vowel")
+                .text
+        };
+        assert_eq!(typing(Charset::Unicode), Encoded::Utf16(vec![0x00E1]));
+        assert_eq!(typing(Charset::Tcvn3), Encoded::Bytes(vec![0xB8]));
+        assert_eq!(
+            typing(Charset::VniWindows),
+            Encoded::Bytes(vec![0x61, 0xF9])
+        );
+        assert_eq!(
+            typing(Charset::UnicodeCompound),
+            Encoded::Utf16(vec![0x0061, 0x0301])
+        );
+        assert_eq!(typing(Charset::Cp1258), Encoded::Bytes(vec![0x61, 0xEC]));
     }
 }

@@ -23,5 +23,5 @@ mod tables;
 mod word;
 
 pub use engine::{Engine, Letter, Mark, Word};
-pub use event::{Action, Edit, Ext, Key, KeyEvent, Mods, Outcome, Phase};
+pub use event::{Action, Edit, Encoded, Ext, Key, KeyEvent, Mods, Outcome, Phase};
 pub use options::{Charset, InputMethod, Options};
