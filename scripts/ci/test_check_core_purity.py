@@ -96,5 +96,22 @@ class BannedConstructs(unittest.TestCase):
         self.assertEqual(flagged(source), set())
 
 
+class LetterIndexing(unittest.TestCase):
+    def test_direct_indexing_is_flagged(self) -> None:
+        self.assertTrue(scanner.indexes_letters("let first = self.letters[0];"))
+
+    def test_space_before_the_bracket_is_flagged(self) -> None:
+        self.assertTrue(scanner.indexes_letters("let first = word.letters [0];"))
+
+    def test_get_is_clean(self) -> None:
+        self.assertFalse(scanner.indexes_letters("let first = word.get(0);"))
+
+    def test_slice_accessor_is_clean(self) -> None:
+        self.assertFalse(scanner.indexes_letters("let all = word.letters();"))
+
+    def test_comment_is_ignored(self) -> None:
+        self.assertFalse(scanner.indexes_letters("// letters[ is only for word.rs"))
+
+
 if __name__ == "__main__":
     unittest.main()
