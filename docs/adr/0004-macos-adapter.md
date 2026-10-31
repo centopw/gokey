@@ -106,8 +106,9 @@ configuration in which a partially working adapter is preferable to a visible "n
 6 from CoreFoundation plus that static, and 1 from IOKit (`IOHIDCheckAccess`, used only for
 reporting trust state). Counted at `d56b160` with
 `awk '/^mod ffi/,/^}/' crates/openkey-macos/src/tap.rs | grep -cE 'pub fn'` (13) and the same range
-with `pub static` (1). All of the FFI lives in this one file; `key_from_keycode` and the callback are
-the only logic that knows it is on macOS.
+with `pub static` (1). All of the **library's** FFI lives in this one file (the diagnostic probe
+declares three symbols of its own, in `mac001_probe.rs`); `key_from_keycode` and the callback are the
+only logic that knows it is on macOS.
 
 An ObjC++ host exists upstream because the UI is ObjC++ — not because the tap needs it. Keeping the
 adapter in Rust means the callback, the keycode table and the engine call are in the same language as
@@ -173,13 +174,20 @@ Environment: macOS 26.6.2 (25G83), arm64, rustc 1.99.0, Apple clang 21.0.0. Bran
 
 ```
 AXIsProcessTrusted() = false  (Accessibility)
-IOHIDCheckAccess(post)   = 1 denied
-IOHIDCheckAccess(listen) = 2 unknown
+IOHIDCheckAccess(post)   = 1 denied     <- the spike passed 1, which is LISTEN
+IOHIDCheckAccess(listen) = 2 unknown    <- the spike passed 2, which is not in the enum
 ```
 
-`IOHIDCheckAccess` returns `0` granted, `1` denied, `2` unknown (never asked). Listening access was
-never requested, so it reads `unknown`; posting access is `denied`, which is the axis that matters for
-emission.
+The output is kept verbatim, labels included, because the labels are wrong: the spike called
+`IOHIDCheckAccess(1)` and `IOHIDCheckAccess(2)` (`k008_spike.rs:360-361` at `6700aaa`), while the
+enum is `kIOHIDRequestTypePostEvent = 0`, `kIOHIDRequestTypeListenEvent = 1`
+(`IOHIDLib.h:162-165`). So the first line is the **listen** answer under a `post` label, and the
+second is the framework's answer to an argument outside the enum — not a listening measurement.
+
+`IOHIDCheckAccess` returns `0` granted, `1` denied, `2` unknown (never asked). The spike therefore
+measured one real axis (listening: denied) and did not measure posting access at all; no `post`
+measurement was ever taken. The corrected call in `openkey-macos` reports the two axes separately,
+and the trusted run below is what records the real `post` answer.
 
 ### 2. `CGEventTapCreate` returned `NULL` in all four combinations
 
