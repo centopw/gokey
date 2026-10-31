@@ -136,8 +136,9 @@ no-vowel case. Upstream leaves `_spellingOK` false there (`Engine.cpp:229-280`),
 and only the `_spellingEndIndex == 0` branch sets it true (`:281-282`). Deleting
 the extra `else` restores the upstream verdicts: `zzas` stays `zzas` and `xq`
 stays `xq` with the check on, while `no-spelling` still tones `zzas` to `zzá`.
-The three red `edit` cases (`sp-on-zzas`, `sp-on-xq`, `sp-on-hoc`) were this
-symptom, not corpus defects.
+The three red `edit` cases (`sp-on-zzas`, `sp-zfwj-zas-off`, `sp-zfwj-jis-off`)
+were this symptom, not corpus defects; `sp-on-xq` and `sp-on-hoc` pass either
+way.
 
 ## Corpus
 
@@ -145,5 +146,5 @@ symptom, not corpus defects.
 flag itself (`sp-restore-asdf`, `-viet`, `-hi`, `-xyz`, harness baseline), the
 break branch (`sp-restore-break`, `asd.`), the space branch
 (`sp-restore-space`, `asd` + space), and the flag-off control
-(`sp-restore-off`, `asd` + space → `ád `). With the `edit` block active the
-parity run judges 193 cases; every in-scope case must be judged.
+(`sp-restore-off`, `asd` + space → `ád `). With the `edit` and `vni` blocks
+active the parity run judges 248 cases; every in-scope case must be judged.
