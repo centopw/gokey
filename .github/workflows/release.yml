@@ -1,0 +1,297 @@
+name: release
+
+# tier 6 — the public download path (ADR-0008 §4, ADR-0010).
+#
+# D1/D2 (2026-10-30): the Apple team is not a paid Developer Program membership, so
+# Apple issues no Developer ID certificate and accepts no notarisation submission. The
+# dmg is therefore ad-hoc signed, and every user clears Gatekeeper once. That is the
+# price of D1 and it is stated on the release page, not implied here.
+#
+# This workflow holds no credentials: no secrets, no environment, no Apple identity. The
+# only token is the job-scoped GITHUB_TOKEN, granted `contents: write` on the publish job
+# alone. A step below fails the run if a secret reference ever reappears — if one does,
+# the design changed and ADR-0010 has to change with it.
+#
+# The verification step asserts that `spctl` *rejects* the artefacts. A green run means
+# "macOS refuses this build", which is the documented state. It must never be read as
+# "Gatekeeper approved".
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing v* tag to rebuild and publish"
+        required: true
+        type: string
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_VERSION: "1.99.0"
+  DARWIN_TARGETS: "aarch64-apple-darwin x86_64-apple-darwin"
+
+jobs:
+  build:
+    name: universal dmg (ad-hoc)
+    runs-on: macos-15
+    outputs:
+      tag: ${{ steps.ctx.outputs.tag }}
+      version: ${{ steps.ctx.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          # origin/main for the ancestry check, and the tag object for `git archive`.
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable channel
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: ${{ env.DARWIN_TARGETS }}
+
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
+
+      - name: No credentials in this workflow
+        run: |
+          # Matches the expression form only, on non-comment lines: prose in this file
+          # mentions secrets on purpose, and that must not trip its own guard.
+          if grep -nE '^[^#]*\$\{\{[[:space:]]*secrets\.' .github/workflows/release.yml; then
+            echo "::error::release.yml references a secret; the ad-hoc path has no credentials (ADR-0010)"
+            exit 1
+          fi
+
+      - name: Resolve the tag and check what it points at
+        id: ctx
+        env:
+          DISPATCH_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ -n "${DISPATCH_TAG:-}" ]; then TAG="$DISPATCH_TAG"; else TAG="$GITHUB_REF_NAME"; fi
+          case "$TAG" in
+            v[0-9]*) ;;
+            *) echo "::error::'$TAG' is not a v<version> tag"; exit 1 ;;
+          esac
+          TAG_VERSION="${TAG#v}"
+
+          # HEAD, not GITHUB_SHA: on a manual dispatch GITHUB_SHA is the branch the run
+          # was started from, while checkout has already been pinned to the tag.
+          HEAD_SHA="$(git rev-parse HEAD)"
+
+          tagged_commit="$(git rev-parse "refs/tags/$TAG^{commit}")"
+          if [ "$tagged_commit" != "$HEAD_SHA" ]; then
+            echo "::error::$TAG points at $tagged_commit, but HEAD is $HEAD_SHA"
+            exit 1
+          fi
+
+          # A tag on an unmerged branch is releasable otherwise — the same mistake as
+          # scanning a ref that is not the one under test.
+          if ! git merge-base --is-ancestor "$HEAD_SHA" origin/main; then
+            echo "::error::$HEAD_SHA is not an ancestor of origin/main ($(git rev-parse --short origin/main)); refusing to release it"
+            exit 1
+          fi
+
+          # The tag is the version; Cargo.toml is the other half of the same claim. A
+          # semver pre-release suffix is allowed (v0.1.0-alpha.1 is tagged from 0.1.0),
+          # but the numeric base must match, so v0.9.9 against 0.1.0 still fails.
+          TAG_BASE="${TAG_VERSION%%-*}"
+          crate_version="$(cargo metadata --no-deps --locked --format-version 1 |
+            python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(p["version"] for p in d["packages"] if p["name"] == "openkey-cli"))')"
+          if [ "$TAG_BASE" != "$crate_version" ]; then
+            echo "::error::tag says $TAG (base $TAG_BASE), crates/openkey-cli says $crate_version"
+            exit 1
+          fi
+
+          # CFBundleShortVersionString must be period-separated integers, so the bundle
+          # carries the crate version and the tag stays the release identity.
+          {
+            echo "tag=$TAG"
+            echo "version=$crate_version"
+            echo "sha=$HEAD_SHA"
+            echo "tag_type=$(git cat-file -t "refs/tags/$TAG")"
+            echo "main_tip=$(git rev-parse origin/main)"
+            echo "build=$(git rev-list --count HEAD)"
+            echo "toolchain=$(rustc --version)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build both slices
+        run: |
+          set -euo pipefail
+          for target in $DARWIN_TARGETS; do
+            cargo build --release --locked -p openkey-cli --target "$target"
+          done
+
+      - name: lipo into one binary
+        run: |
+          set -euo pipefail
+          mkdir -p stage
+          lipo -create -output stage/openkey \
+            target/aarch64-apple-darwin/release/openkey \
+            target/x86_64-apple-darwin/release/openkey
+          archs="$(lipo -archs stage/openkey | tr ' ' '\n' | sort | tr '\n' ' ')"
+          echo "archs: $archs"
+          [ "$archs" = "arm64 x86_64 " ] || { echo "::error::lipo produced '$archs'"; exit 1; }
+
+      - name: Build the dmg (ad-hoc, unchanged path)
+        env:
+          VERSION: ${{ steps.ctx.outputs.version }}
+          TAG: ${{ steps.ctx.outputs.tag }}
+          BUILD: ${{ steps.ctx.outputs.build }}
+          TOOLCHAIN: ${{ steps.ctx.outputs.toolchain }}
+        run: |
+          set -euo pipefail
+          ./packaging/macos/build-dmg.sh \
+            --binary stage/openkey --out dist \
+            --version "$VERSION" --build "$BUILD" \
+            --tag "$TAG" --toolchain "$TOOLCHAIN" \
+            --offer-out dist/SOURCE-OFFER.txt
+
+      - name: Assert ad-hoc, universal, and refused by Gatekeeper
+        run: |
+          set -euo pipefail
+          DMG="$(ls dist/*.dmg)"
+          echo "dmg: $DMG"
+          MNT="$(mktemp -d)"
+          trap 'hdiutil detach -quiet "$MNT" || true' EXIT
+          hdiutil attach -quiet -nobrowse -readonly -mountpoint "$MNT" "$DMG"
+
+          APP="$MNT/GoKey.app"
+          BIN="$APP/Contents/MacOS/openkey"
+
+          # The fat binary survived packaging: this is the file a user actually gets.
+          archs="$(lipo -archs "$BIN" | tr ' ' '\n' | sort | tr '\n' ' ')"
+          [ "$archs" = "arm64 x86_64 " ] || { echo "::error::app inside the dmg is '$archs', expected universal"; exit 1; }
+
+          # Both flags matter: adhoc says "no identity", runtime says "hardened", and the
+          # second is what stops a future signed build from silently losing it.
+          codesign -dv --verbose=4 "$APP" > /tmp/app-signature.txt 2>&1
+          cat /tmp/app-signature.txt
+          grep -qx 'Signature=adhoc' /tmp/app-signature.txt ||
+            { echo "::error::the app is not ad-hoc signed — a real identity appeared; re-read ADR-0010"; exit 1; }
+          grep -qE 'flags=0x[0-9a-f]+\(adhoc,runtime\)' /tmp/app-signature.txt ||
+            { echo "::error::hardened runtime flag missing from the app signature"; exit 1; }
+
+          codesign -dv --verbose=4 "$DMG" > /tmp/dmg-signature.txt 2>&1
+          grep -qx 'Signature=adhoc' /tmp/dmg-signature.txt ||
+            { echo "::error::the dmg is not ad-hoc signed"; exit 1; }
+
+          # Expected to fail. If it ever passes, macOS now trusts this build, the install
+          # instructions on the release page are wrong, and the ADR is stale — fail loudly
+          # instead of letting a green job imply approval.
+          expect_rejected() {
+            local what="$1"; shift
+            local out rc
+            set +e
+            out="$("$@" 2>&1)"; rc=$?
+            set -e
+            printf '%s\n' "$out"
+            if [ "$rc" -eq 0 ]; then
+              echo "::error::spctl accepted the $what — Gatekeeper behaviour changed; ADR-0010 and the release notes are stale"
+              exit 1
+            fi
+            case "$out" in
+              *rejected*) echo "    ok  spctl rejects the $what, as documented" ;;
+              *) echo "::error::spctl failed on the $what without saying 'rejected': $out"; exit 1 ;;
+            esac
+          }
+          expect_rejected app spctl -a -t exec -vv "$APP"
+          expect_rejected dmg spctl -a -t open --context context:primary-signature -v "$DMG"
+
+      - name: Corresponding source from the tag
+        env:
+          TAG: ${{ steps.ctx.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p publish
+          # `git archive` of the tag, not the archive/ endpoint: the endpoint is a
+          # server-side regeneration with no byte-stability guarantee, and the tarball
+          # here is the GPL-3.0 corresponding source, not a convenience link (ADR-0010 §4).
+          git archive --format=tar.gz --prefix="gokey-$TAG/" -o publish/source.tar.gz "refs/tags/$TAG"
+          for path in LICENSE NOTICE.md Cargo.lock packaging/macos/build-dmg.sh; do
+            tar tzf publish/source.tar.gz | grep -qx "gokey-$TAG/$path" ||
+              { echo "::error::source.tar.gz is missing $path"; exit 1; }
+          done
+
+      - name: Assemble the release assets
+        env:
+          TAG: ${{ steps.ctx.outputs.tag }}
+          VERSION: ${{ steps.ctx.outputs.version }}
+          SHA: ${{ steps.ctx.outputs.sha }}
+          TAG_TYPE: ${{ steps.ctx.outputs.tag_type }}
+          MAIN_TIP: ${{ steps.ctx.outputs.main_tip }}
+          BUILD: ${{ steps.ctx.outputs.build }}
+          TOOLCHAIN: ${{ steps.ctx.outputs.toolchain }}
+        run: |
+          set -euo pipefail
+          cp dist/*.dmg publish/
+          cp dist/SOURCE-OFFER.txt publish/
+          cp LICENSE publish/LICENSE.txt
+          cp NOTICE.md publish/NOTICE.md
+          ( cd publish && shasum -a 256 ./*.dmg source.tar.gz > SHA256SUMS && cat SHA256SUMS )
+
+          # Notes live in .github/release-notes.md.in so they can be read in review; the
+          # install instructions below are the actual Gatekeeper bypass for this build.
+          sed \
+            -e "s|@TAG@|$TAG|g" \
+            -e "s|@VERSION@|$VERSION|g" \
+            -e "s|@BUILD@|$BUILD|g" \
+            -e "s|@SHA@|$SHA|g" \
+            -e "s|@TAG_TYPE@|$TAG_TYPE|g" \
+            -e "s|@MAIN_TIP@|$MAIN_TIP|g" \
+            -e "s|@TOOLCHAIN@|$TOOLCHAIN|g" \
+            .github/release-notes.md.in > publish/RELEASE-NOTES.md
+          if grep -n '@[A-Z_]*@' publish/RELEASE-NOTES.md; then
+            echo "::error::unsubstituted placeholder in the release notes"
+            exit 1
+          fi
+          head -20 publish/RELEASE-NOTES.md
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: gokey-release-${{ steps.ctx.outputs.tag }}
+          path: publish/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: publish pre-release
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: gokey-release-${{ needs.build.outputs.tag }}
+          path: publish
+
+      - name: Verify what is about to be published
+        run: |
+          set -euo pipefail
+          cd publish
+          ls -l
+          shasum -a 256 -c SHA256SUMS
+
+      # --prerelease is deliberate and hardcoded until MAC-002: the payload is the engine
+      # stub, so a stable release would be a claim the artefact cannot support (ADR-0010 §5).
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build.outputs.tag }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" \
+            --verify-tag --prerelease \
+            --title "GoKey $VERSION - pre-release (engine stub)" \
+            --notes-file publish/RELEASE-NOTES.md \
+            publish/*.dmg publish/source.tar.gz publish/SHA256SUMS \
+            publish/LICENSE.txt publish/NOTICE.md publish/SOURCE-OFFER.txt
