@@ -85,3 +85,40 @@ jobs:
           else
             gh issue create --title "$title" --body "$body"
           fi
+
+  # ADR-0009. `secrets` in ci.yml scans `--log-opts=HEAD`, so a PR is not failed by commits
+  # on branches it never contained. This is the other half: every ref, daily, same pinned
+  # binary and same config. A secret that only ever existed on a deleted or never-opened
+  # branch is found here and nowhere else. Scheduled rather than per-PR because that is
+  # exactly the signal a per-PR gate cannot carry.
+  secrets-history:
+    name: secrets (all refs)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # every branch and tag: that is what this job is for
+      - name: gitleaks (pinned, checksum-verified)
+        run: scripts/ci/fetch-gitleaks.sh /tmp/gl
+      # Same self-check as the per-PR gate: if the config stopped detecting, an empty
+      # result here would read as a clean history.
+      - name: Allowlist is as narrow as the ADR says, and the detector still fires
+        run: python3 scripts/ci/test_gitleaks_config.py --gitleaks /tmp/gl/gitleaks
+      - name: Scan every ref
+        # No --log-opts: gitleaks 8.30.1 defaults to all refs, which is the point.
+        run: /tmp/gl/gitleaks git . --config .gitleaks.toml --redact --no-banner --exit-code 1
+      - name: Report failure as an issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          title="nightly: secrets history sweep found a leak"
+          body=$(printf 'Run: %s/%s/actions/runs/%s\nCommit: %s\n' \
+            "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" "$GITHUB_SHA")
+          existing=$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
