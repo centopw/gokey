@@ -1,0 +1,18 @@
+# Where the spelling check and the allow-zfwj flag change the answer.
+# id	method	options	input	expected
+# sp-off-asdf: no-spelling does not suppress the tone key on an invalid cluster: a+s applies first
+sp-off-asdf	telex	no-spelling	asdf	ádf
+sp-on-asdf	telex	spelling	asdf	ádf
+sp-on-xq	telex	spelling	xq	xq
+sp-on-hoc	telex	spelling	hocj	học
+sp-restore-asdf	telex	restore-if-wrong-spelling	asdf	ádf
+sp-restore-viet	telex	restore-if-wrong-spelling	vieejt	việt
+sp-restore-hi	telex	restore-if-wrong-spelling	hij	hị
+sp-temp-off	telex	temp-off-spelling	vieejt	việt
+sp-temp-off-asdf	telex	temp-off-spelling	asdf	ádf
+sp-zfwj-zas-off	telex	-	zas	zas
+# sp-zfwj-zas-on: allow-zfwj is what lets z start a syllable, so the s can land on it
+sp-zfwj-zas-on	telex	allow-zfwj	zas	zá
+sp-zfwj-wos-off	telex	-	wos	ứo
+sp-zfwj-wos-on	telex	allow-zfwj	wos	ứo
+sp-restore-xyz	telex	restore-if-wrong-spelling	xyz	xyz

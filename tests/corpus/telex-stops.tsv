@@ -1,0 +1,19 @@
+# Final consonants with the tone on them, in real words.
+# id	method	options	input	expected
+stop-ac	telex	-	acs	ác
+stop-ach	telex	-	achs	ách
+stop-ap	telex	-	aps	áp
+stop-at	telex	-	ats	át
+stop-an	telex	-	ans	án
+stop-ang	telex	-	angs	áng
+stop-am	telex	-	ams	ám
+stop-mai	telex	-	mais	mái
+stop-thuoc	telex	-	thuoocs	thuốc
+stop-quyet	telex	-	quyeets	quyết
+stop-huyen	telex	-	huyeenj	huyện
+stop-nghiep	telex	-	nghieesp	nghiếp
+stop-truong	telex	-	truwowngf	trường
+stop-nguoi	telex	-	nguwowif	người
+stop-bong	telex	-	boongs	bống
+stop-cau	telex	-	caauf	cầu
+stop-may	telex	-	mays	máy
