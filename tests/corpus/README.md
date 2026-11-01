@@ -5,7 +5,7 @@ Golden cases shared by the Rust engine and the reference C++ engine.
 Format: tab-separated, one case per line, `#` starts a comment.
 
 ```
-id <TAB> method <TAB> options <TAB> input <TAB> expected
+id <TAB> method <TAB> options <TAB> input [<TAB> expected [<TAB> macros]]
 ```
 
 - `method`: `telex`, `vni`, `simple_telex_1`, `simple_telex_2`
@@ -22,6 +22,17 @@ id <TAB> method <TAB> options <TAB> input <TAB> expected
   backslash followed by `n` is written `\\n`. `-` means the empty document. A
   five-column row is required; the judge refuses a four-column one unless it
   is asked for with `--allow-missing-expected`.
+- `macros` (optional sixth column): the case's macro table,
+  `name=content;name=content`. It is **literal UTF-8 with no escape decoding**,
+  the first `=` splits a pair, and the content may be empty. `-`, or leaving the
+  column off, is the empty table. A duplicate name is legal: upstream `addMacro`
+  replaces the content (`Macro.cpp:216-232`). A malformed cell is an error, not a
+  skip. Because escapes are not decoded, a pair cannot contain a tab or a `;`;
+  neither can appear in a macro name or content in practice.
+
+Exactly 4, 5 or 6 fields are accepted and **a seventh is an error**, in the Rust
+loader, `compare.py` and the harness alike. An ignored extra column would let a
+row replay against a table nobody parsed.
 
 Example:
 
@@ -29,6 +40,7 @@ Example:
 telex-basic	telex	-	vieejt	việt
 telex-d-stroke	telex	-	dd	đ
 vni-basic	vni	-	vie65t	việt
+macro-space-match	telex	-	ko\s	không\s	ko=không
 ```
 
 Rules:
@@ -65,7 +77,7 @@ Files: `telex-basic`, `telex-tones`, `telex-words`, `telex-syllables`,
 `telex-clusters`, `telex-stops`, `telex-tone-cycle`, `vni-basic`, `vni-words`,
 `vni-tones`, `simple-telex`, `simple-telex-modes`, `editing`,
 `editing-sequences`, `options`, `options-combos`, `spelling-boundaries`,
-`case-mixed` — 300 cases, every `expected` column produced by the pinned
-reference harness (`scripts/parity/README.md`), never hand-written.
+`macros`, `case-mixed` — 334 cases, every `expected` column produced by the
+pinned reference harness (`scripts/parity/README.md`), never hand-written.
 
 Owned by: QA/parity engineer (R5). Reviewed by: linguistics reviewer (R11).

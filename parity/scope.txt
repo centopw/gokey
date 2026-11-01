@@ -32,6 +32,10 @@ block: edit file:tests/corpus/editing.tsv,file:tests/corpus/editing-sequences.ts
 
 block: opt file:tests/corpus/options.tsv,file:tests/corpus/options-combos.tsv
 
+# C-009's block is selected by file: every row in macros.tsv declares its own
+# table in the sixth column, so an id glob would only repeat that.
+block: macro file:tests/corpus/macros.tsv
+
 # Empty at K-005: every case resolves, every block is inactive, so the run
 # reported 311 skipped and exited 0. `active:` names a defined block only.
 #
@@ -58,3 +62,11 @@ active: simple
 # here on. This is the last block, so nothing stays skipped by name and
 # `skipped 0` becomes the steady state; the skip path itself leaves with C-014.
 active: opt
+
+# C-009 activates `macro`: macros.tsv is judged from here on, so all six
+# declared blocks are active (`telex`, `edit`, `vni`, `simple`, `opt`, `macro`)
+# and `skipped 0` is the steady state again. The skip path itself still leaves
+# with C-014. This file is append-only, so C-009 adds lines and rewrites none —
+# the header's "five" and C-008's "last block" are C-008's text, superseded
+# here rather than edited.
+active: macro

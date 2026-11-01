@@ -18,10 +18,15 @@
 pub mod charset;
 pub mod engine;
 pub mod event;
+// `macro` is a reserved keyword, so the module is named `macros` while its
+// file keeps the upstream name (`Macro.cpp`).
+#[path = "macro.rs"]
+pub mod macros;
 pub mod options;
 mod tables;
 mod word;
 
 pub use engine::{Engine, Letter, Mark, Word};
 pub use event::{Action, Edit, Encoded, Ext, Key, KeyEvent, Mods, Outcome, Phase};
+pub use macros::{Macro, MacroTable, find_macro};
 pub use options::{Charset, InputMethod, Options};

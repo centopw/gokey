@@ -1145,6 +1145,150 @@ pub(crate) fn key_character(code: u32) -> Option<char> {
     }
 }
 
+/// The row keys of every `_codeTable` entry, in the order a `std::map`
+/// iterates them.
+///
+/// `convert` (`Macro.cpp:45-57`) and `modifyCaseUnicode` (`:138-150`) scan the
+/// table with `std::map`'s ascending key order, so the port must scan the same
+/// order: the scan takes the first row that contains a cell, and that is only
+/// observable if two rows ever share one. Pinned by a test rather than derived
+/// from the declaration order, because the declaration order is the opposite
+/// (`A, O, U, E, D, ...`).
+const ROW_KEYS_BY_MAP_ORDER: [u32; 13] = [
+    KEY_A as u32,
+    KEY_D as u32,
+    KEY_E as u32,
+    KEY_Y as u32,
+    KEY_O as u32,
+    KEY_U as u32,
+    KEY_I as u32,
+    KEY_A as u32 | TONE_MASK,
+    KEY_E as u32 | TONE_MASK,
+    KEY_O as u32 | TONE_MASK,
+    KEY_A as u32 | TONEW_MASK,
+    KEY_O as u32 | TONEW_MASK,
+    KEY_U as u32 | TONEW_MASK,
+];
+
+/// The rows of `_codeTable[charset]` in `std::map` order (see
+/// [`ROW_KEYS_BY_MAP_ORDER`]), with the key and the cells.
+pub(crate) fn code_rows(charset: Charset) -> impl Iterator<Item = (u32, &'static [u16])> {
+    let table = code_table(charset);
+    ROW_KEYS_BY_MAP_ORDER.iter().filter_map(move |&key| {
+        table
+            .iter()
+            .find(|(row_key, _)| *row_key == key)
+            .map(|&(row_key, row)| (row_key, row))
+    })
+}
+
+/// `_characterMap` (`Vietnamese.cpp:508-559`): the keycode a character types.
+///
+/// The inverse of [`key_character`], including its shifted form. Only the
+/// characters upstream lists are accepted, and `' '` is the one character with
+/// no shifted form.
+pub(crate) fn character_key(character: char) -> Option<u32> {
+    let (code, caps) = match character {
+        'a' => (KEY_A, false),
+        'A' => (KEY_A, true),
+        'b' => (KEY_B, false),
+        'B' => (KEY_B, true),
+        'c' => (KEY_C, false),
+        'C' => (KEY_C, true),
+        'd' => (KEY_D, false),
+        'D' => (KEY_D, true),
+        'e' => (KEY_E, false),
+        'E' => (KEY_E, true),
+        'f' => (KEY_F, false),
+        'F' => (KEY_F, true),
+        'g' => (KEY_G, false),
+        'G' => (KEY_G, true),
+        'h' => (KEY_H, false),
+        'H' => (KEY_H, true),
+        'i' => (KEY_I, false),
+        'I' => (KEY_I, true),
+        'j' => (KEY_J, false),
+        'J' => (KEY_J, true),
+        'k' => (KEY_K, false),
+        'K' => (KEY_K, true),
+        'l' => (KEY_L, false),
+        'L' => (KEY_L, true),
+        'm' => (KEY_M, false),
+        'M' => (KEY_M, true),
+        'n' => (KEY_N, false),
+        'N' => (KEY_N, true),
+        'o' => (KEY_O, false),
+        'O' => (KEY_O, true),
+        'p' => (KEY_P, false),
+        'P' => (KEY_P, true),
+        'q' => (KEY_Q, false),
+        'Q' => (KEY_Q, true),
+        'r' => (KEY_R, false),
+        'R' => (KEY_R, true),
+        's' => (KEY_S, false),
+        'S' => (KEY_S, true),
+        't' => (KEY_T, false),
+        'T' => (KEY_T, true),
+        'u' => (KEY_U, false),
+        'U' => (KEY_U, true),
+        'v' => (KEY_V, false),
+        'V' => (KEY_V, true),
+        'w' => (KEY_W, false),
+        'W' => (KEY_W, true),
+        'x' => (KEY_X, false),
+        'X' => (KEY_X, true),
+        'y' => (KEY_Y, false),
+        'Y' => (KEY_Y, true),
+        'z' => (KEY_Z, false),
+        'Z' => (KEY_Z, true),
+        '1' => (KEY_1, false),
+        '!' => (KEY_1, true),
+        '2' => (KEY_2, false),
+        '@' => (KEY_2, true),
+        '3' => (KEY_3, false),
+        '#' => (KEY_3, true),
+        '4' => (KEY_4, false),
+        '$' => (KEY_4, true),
+        '5' => (KEY_5, false),
+        '%' => (KEY_5, true),
+        '6' => (KEY_6, false),
+        '^' => (KEY_6, true),
+        '7' => (KEY_7, false),
+        '&' => (KEY_7, true),
+        '8' => (KEY_8, false),
+        '*' => (KEY_8, true),
+        '9' => (KEY_9, false),
+        '(' => (KEY_9, true),
+        '0' => (KEY_0, false),
+        ')' => (KEY_0, true),
+        '`' => (KEY_BACKQUOTE, false),
+        '~' => (KEY_BACKQUOTE, true),
+        '-' => (KEY_MINUS, false),
+        '_' => (KEY_MINUS, true),
+        '=' => (KEY_EQUALS, false),
+        '+' => (KEY_EQUALS, true),
+        '[' => (KEY_LEFT_BRACKET, false),
+        '{' => (KEY_LEFT_BRACKET, true),
+        ']' => (KEY_RIGHT_BRACKET, false),
+        '}' => (KEY_RIGHT_BRACKET, true),
+        '\\' => (KEY_BACK_SLASH, false),
+        '|' => (KEY_BACK_SLASH, true),
+        ';' => (KEY_SEMICOLON, false),
+        ':' => (KEY_SEMICOLON, true),
+        '\'' => (KEY_QUOTE, false),
+        '"' => (KEY_QUOTE, true),
+        ',' => (KEY_COMMA, false),
+        '<' => (KEY_COMMA, true),
+        '.' => (KEY_DOT, false),
+        '>' => (KEY_DOT, true),
+        '/' => (KEY_SLASH, false),
+        '?' => (KEY_SLASH, true),
+        ' ' => (KEY_SPACE, false),
+        _ => return None,
+    };
+    Some(u32::from(code) | if caps { CAPS_MASK } else { 0 })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1203,6 +1347,79 @@ mod tests {
         assert_eq!(key_character(u32::from(KEY_DOT)), Some('.'));
         // A mark bit is not part of the map key, exactly like upstream.
         assert_eq!(key_character(u32::from(KEY_A) | TONE_MASK), None);
+    }
+
+    /// Every character `_characterMap` (`Vietnamese.cpp:508-559`) lists:
+    /// 52 letters, 20 shifted digits, 22 shifted punctuation marks and space.
+    const MAPPED_CHARACTERS: &str = concat!(
+        "abcdefghijklmnopqrstuvwxyz",
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+        "0123456789",
+        "!@#$%^&*()",
+        "-_=+[]\\{}|;:'\",.<>/?`~",
+        " ",
+    );
+
+    #[test]
+    fn character_key_is_the_inverse_of_key_character_for_the_whole_map() {
+        let mut count = 0;
+        for character in MAPPED_CHARACTERS.chars() {
+            let code = character_key(character)
+                .unwrap_or_else(|| panic!("{character:?} is in _characterMap"));
+            assert_eq!(key_character(code), Some(character), "{character:?}");
+            count += 1;
+        }
+        assert_eq!(count, 95);
+        // Anything outside the map has no keycode, exactly like `operator[]`'s
+        // miss would be an inserted zero — which is why callers use `Option`.
+        assert_eq!(character_key('\u{1EA5}'), None);
+        assert_eq!(character_key('\t'), None);
+    }
+
+    #[test]
+    fn code_rows_are_in_std_map_order_and_every_charset_has_the_same_shape() {
+        let keys: Vec<u32> = code_rows(Charset::Unicode).map(|(key, _)| key).collect();
+        assert_eq!(
+            keys,
+            vec![
+                u32::from(KEY_A),
+                u32::from(KEY_D),
+                u32::from(KEY_E),
+                u32::from(KEY_Y),
+                u32::from(KEY_O),
+                u32::from(KEY_U),
+                u32::from(KEY_I),
+                u32::from(KEY_A) | TONE_MASK,
+                u32::from(KEY_E) | TONE_MASK,
+                u32::from(KEY_O) | TONE_MASK,
+                u32::from(KEY_A) | TONEW_MASK,
+                u32::from(KEY_O) | TONEW_MASK,
+                u32::from(KEY_U) | TONEW_MASK,
+            ]
+        );
+        let mut sorted = keys.clone();
+        sorted.sort_unstable();
+        assert_eq!(keys, sorted, "a std::map iterates ascending keys");
+
+        let lengths: Vec<usize> = code_rows(Charset::Unicode)
+            .map(|(_, cells)| cells.len())
+            .collect();
+        let unicode: Vec<(u32, usize)> =
+            keys.iter().copied().zip(lengths.iter().copied()).collect();
+        for charset in [
+            Charset::Tcvn3,
+            Charset::VniWindows,
+            Charset::UnicodeCompound,
+            Charset::Cp1258,
+        ] {
+            let rows: Vec<(u32, usize)> = code_rows(charset)
+                .map(|(key, cells)| (key, cells.len()))
+                .collect();
+            assert_eq!(
+                rows, unicode,
+                "{charset:?}: convert() indexes the active table by the Unicode row and column"
+            );
+        }
     }
 
     #[test]

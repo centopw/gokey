@@ -7,11 +7,12 @@
 //! direction: a case in an **active** block that is not judged keeps the run
 //! non-green, so green can only mean "nothing declared is unjudged".
 //!
-//! Definition and activation are separate lines. All five blocks are defined from
-//! day one — so every case resolves and an unclassified case is always an error,
-//! never a quiet skip — while `active:` starts empty and grows one line per task
-//! (C-002 `telex`, C-006 `edit`, C-003 `vni`, C-004 `simple`, C-008 `opt`). At
-//! C-014 `active:` lists all five, so no skip path remains.
+//! Definition and activation are separate lines. Every block is defined before
+//! any case in it can be judged — so every case resolves and an unclassified
+//! case is always an error, never a quiet skip — while `active:` starts empty
+//! and grows one line per task (C-002 `telex`, C-006 `edit`, C-003 `vni`,
+//! C-004 `simple`, C-008 `opt`, C-009 `macro`). At C-014 `active:` lists all
+//! six, so no skip path remains.
 //!
 //! Grammar (one file, `#` comments, blank lines ignored):
 //!

@@ -341,10 +341,10 @@ fn played_scripts() -> (PathBuf, Vec<PathBuf>) {
 #[test]
 fn the_declared_scope_classifies_every_case_and_activates_every_block() {
     let (scope, scripts) = played_scripts();
-    assert_eq!(scripts.len(), 19, "18 corpus files + smoke");
+    assert_eq!(scripts.len(), 20, "19 corpus files + smoke");
 
     // One global pass over the played set: zero unclassified, exactly one block
-    // per case, and the five-block split.
+    // per case, and the six-block split.
     let mut args = vec![
         "scope".to_string(),
         "--scope".to_string(),
@@ -358,27 +358,28 @@ fn the_declared_scope_classifies_every_case_and_activates_every_block() {
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert!(
         run.stdout
-            .contains("scope: 314 case(s) over 19 corpus file(s)"),
+            .contains("scope: 334 case(s) over 20 corpus file(s)"),
         "{}",
         run.stdout
     );
     assert!(
         run.stdout
-            .contains("scope blocks: edit 52, opt 39, simple 27, telex 141, vni 55"),
+            .contains("scope blocks: edit 52, macro 20, opt 39, simple 27, telex 141, vni 55"),
         "{}",
         run.stdout
     );
     assert!(
-        run.stdout.contains("active: telex, edit, vni, simple, opt"),
+        run.stdout
+            .contains("active: telex, edit, vni, simple, opt, macro"),
         "{}",
         run.stdout
     );
 
     // Per file, the judged/skipped split must add up to that file's corpus: the
     // 141 telex cases (132 corpus + 9 smoke), the 52 edit cases, the 55 VNI
-    // cases, the 27 simple cases and the 39 option cases are all in scope, and
-    // nothing is skipped by name any more — `opt` is the last block to
-    // activate. A verdict may be PASS or FAIL —
+    // cases, the 27 simple cases, the 39 option cases and the 20 macro cases are
+    // all in scope, and nothing is skipped by name any more — `macro` is the
+    // last block to activate. A verdict may be PASS or FAIL —
     // parity completeness is not this test's subject — but an in-scope case left
     // unjudged is exit 2 and is a scope defect, not an engine result.
     let mut skipped = 0usize;
@@ -425,11 +426,11 @@ fn the_declared_scope_classifies_every_case_and_activates_every_block() {
         skipped += counts[2];
     }
     assert_eq!(
-        in_scope, 314,
-        "all five blocks are active, so every declared case is in scope"
+        in_scope, 334,
+        "all six blocks are active, so every declared case is in scope"
     );
     assert_eq!(
         skipped, 0,
-        "`opt` is the last block to activate; nothing is skipped by name"
+        "`macro` is the last block to activate; nothing is skipped by name"
     );
 }

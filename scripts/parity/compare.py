@@ -17,14 +17,21 @@ comparator that returns success when it compared nothing is a gate nobody
 checks again.
 
 Input:
-  <script.tsv>   `id \\t method \\t options \\t input [\\t expected]`
+  <script.tsv>   `id \\t method \\t options \\t input [\\t expected [\\t macros]]`
   <harness.out>  the harness's stdout for that script
+
+The script row is 4, 5 or 6 fields and a seventh is an error. The sixth column
+declares the macro table (`name=content;name=content`, literal UTF-8, `-` or an
+absent column is the empty table). It is validated here and then ignored: this
+comparator judges the document the harness printed, and the harness already
+replayed the table. Accepting a seventh column, or a macros cell the harness
+would refuse, would let a row be judged against a table nobody built.
 
 Exit status:
   0  every case with an expected column agrees
   1  at least one case disagrees
   2  could not judge — the inputs do not line up, a case lost its expected
-     column, or nothing was compared at all
+     column, a row has the wrong number of columns, or nothing was compared at all
 """
 
 from __future__ import annotations
@@ -68,6 +75,35 @@ def unescape(text: str, where: str) -> str:
     return "".join(out)
 
 
+def check_macros(text: str, where: str) -> list[tuple[str, str]]:
+    """Validate the sixth column and return the pairs.
+
+    Mirrors `corpus.rs::parse_macros` and `harness.cpp::parseMacros` exactly:
+    literal UTF-8, no escape decoding, the first `=` splits a pair, a duplicate
+    name is legal (`addMacro` replaces the content), `-` is the empty table and
+    an empty cell is an error. The table is not used here — the harness already
+    built it — but a cell it would refuse must not be judged as if it had.
+    """
+    if text == EMPTY:
+        return []
+    if text == "":
+        raise InputError(f"{where}: empty macros cell (use `-` for the empty table)")
+    pairs: list[tuple[str, str]] = []
+    for raw in text.split(";"):
+        if raw == "":
+            raise InputError(
+                f"{where}: empty macro pair (pairs are separated by `;`, and a trailing "
+                "`;` is a pair)"
+            )
+        name, sep, content = raw.partition("=")
+        if not sep:
+            raise InputError(f"{where}: macro pair {raw!r} has no `=` (expected name=content)")
+        if name == "":
+            raise InputError(f"{where}: macro pair {raw!r} has an empty name")
+        pairs.append((name, content))
+    return pairs
+
+
 def read_script(path: Path) -> list[tuple[str, str, str | None, int]]:
     cases: list[tuple[str, str, str | None, int]] = []
     seen: set[str] = set()
@@ -75,8 +111,10 @@ def read_script(path: Path) -> list[tuple[str, str, str | None, int]]:
         if not line.strip() or line.lstrip().startswith("#"):
             continue
         fields = line.split("\t")
-        if len(fields) < 4:
-            raise InputError(f"{path}:{lineno}: expected at least 4 tab-separated fields")
+        if len(fields) < 4 or len(fields) > 6:
+            raise InputError(
+                f"{path}:{lineno}: expected 4, 5 or 6 tab-separated fields, got {len(fields)}"
+            )
         case_id = fields[0]
         if case_id in seen:
             raise InputError(f"{path}:{lineno}: duplicate case id {case_id!r}")
@@ -84,6 +122,8 @@ def read_script(path: Path) -> list[tuple[str, str, str | None, int]]:
         expected = (
             unescape(fields[4], f"{path}:{lineno}: expected") if len(fields) > 4 else None
         )
+        if len(fields) > 5:
+            check_macros(fields[5], f"{path}:{lineno}: macros")
         cases.append((case_id, fields[3], expected, lineno))
     return cases
 

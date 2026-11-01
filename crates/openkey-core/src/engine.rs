@@ -16,19 +16,22 @@
 //! — DL-026). Each function carries the line range it ports. Upstream bugs that
 //! are observable in output are reproduced rather than fixed (`insertAOE`'s
 //! `IS_KEY_D` clear, `handleModernMark`'s self-comparing rule 3.1 clauses,
-//! `hBPC`'s byte wrap). Two rules are deliberately *not* reproduced because
-//! they cannot be modelled without the macro table:
+//! `hBPC`'s byte wrap).
 //!
-//! - `findMacro` is constant false here, so `vReplaceMaro` is unreachable and
-//!   `hMacroKey`/`hMacroData` bookkeeping is omitted. Macro expansion is a
-//!   separate task.
+//! Macros (C-009) are ported through [`crate::macros`]: `findMacro` is called
+//! at the same four loci upstream calls it, `hMacroKey` is [`Engine`]'s
+//! `macro_key`, and `hMacroData` is its `macro_data`.
+//!
+//! Four deviations are guarded instead of copied, because the C versions read
+//! out of bounds or depend on undefined behaviour:
+//!
 //! - `upperCaseFirstCharacter`'s `hMacroKey[0] |= CAPS_MASK`
-//!   (`Engine.cpp:1050-1051`) indexes an empty vector upstream; with no macro
-//!   state there is nothing to mirror.
-//!
-//! Three more deviations are guarded instead of copied, because the C versions
-//! read out of bounds or depend on undefined behaviour:
-//!
+//!   (`Engine.cpp:1050-1051`) indexes an empty vector; the write happens only
+//!   when an entry exists.
+//! - The main branch copies `TypingWord[_index - hBPC ..]` into `hMacroKey`
+//!   (`Engine.cpp:1526-1530`); for quick-telex `hNCC` reaches one past the
+//!   word, where C reads an unwritten slot. The port reads the word model's
+//!   zero past the end.
 //! - `CHR(_index - 1)` in `checkForStandaloneChar` at `_index == 0`
 //!   (`Engine.cpp:996`) reads `TypingWord[-1]`; here the branch is skipped.
 //! - `CHR(_index)` in `checkSpelling`'s first-vowel probe can read
@@ -36,13 +39,15 @@
 //! - A forward delete (`Key::Delete`) has no macOS constant at the pin and is
 //!   not in `_breakCode`; it is modelled as a word break instead of guessed.
 //!
-//! Telex (C-002), VNI (C-003) and Simple Telex 1/2 (C-004) are ported. A
-//! declared `todo!()` would be reported by the replay as `engine-pending`, and
-//! any other panic as `engine-panic`, so "not written yet" and "wrong" never
-//! share an exit code; no method reaches that path today.
+//! Telex (C-002), VNI (C-003), Simple Telex 1/2 (C-004) and macros (C-009) are
+//! ported. A declared `todo!()` would be reported by the replay as
+//! `engine-pending`, and any other panic as `engine-panic`, so "not written
+//! yet" and "wrong" never share an exit code; no method reaches that path
+//! today.
 
 use crate::charset;
 use crate::event::{Action, Edit, Encoded, Ext, KeyEvent, Outcome, Phase};
+use crate::macros::{Macro, MacroTable};
 use crate::options::{InputMethod, Options};
 use crate::tables::*;
 use crate::word::{MAX_LETTERS, Scan};
@@ -104,7 +109,8 @@ pub struct Engine {
     /// `_useSpellCheckingBefore` (`Engine.cpp:118`).
     use_spell_checking_before: bool,
     temp_disable_key: bool,
-    /// `_hasHandledMacro`; kept for fidelity even though no macro can be found.
+    /// `_hasHandledMacro`: a macro consumed this word, so the space and
+    /// restore branches must not touch it again (`Engine.cpp:114, 1388-1395`).
     has_handled_macro: bool,
     has_handle_quick_consonant: bool,
     will_temp_off_engine: bool,
@@ -118,15 +124,38 @@ pub struct Engine {
     vowel_end: u8,
     vowel_count: u8,
     vowel_will_set_mark: u8,
+    /// `macroMap`: the user's macros, keyed by their converted name
+    /// (`Macro.cpp:216-232`). Empty unless [`Engine::with_macros`] supplied one.
+    macro_table: MacroTable,
+    /// `hMacroKey`: the keystrokes since the last word boundary, in the
+    /// engine's own bits (`Engine.cpp:66`).
+    macro_key: Vec<u32>,
+    /// `hMacroData`: the matched macro's content, ready for `charData`
+    /// (`Engine.cpp:67`).
+    macro_data: Vec<u32>,
 }
 
 impl Engine {
     pub const MAX_BUFFER: usize = crate::word::MAX_LETTERS;
 
+    /// An engine with no macros, which is the app's state before the user
+    /// table is loaded.
     pub fn new(options: Options) -> Self {
+        Self::with_macros(options, &[])
+    }
+
+    /// An engine over the user's macro table (`Macro.cpp:216-232`).
+    ///
+    /// The table is built once and rebuilt only when the charset changes
+    /// (`onTableCodeChange`, `Macro.cpp:242-246`): the names keep the codes they
+    /// were converted with, the contents do not.
+    pub fn with_macros(options: Options, macros: &[Macro]) -> Self {
         Self {
             check_spelling: options.check_spelling,
             use_spell_checking_before: options.check_spelling,
+            macro_table: MacroTable::from_macros(options.charset, macros),
+            macro_key: Vec::new(),
+            macro_data: Vec::new(),
             options,
             hook: Hook::default(),
             word: Word::new(),
@@ -148,6 +177,11 @@ impl Engine {
         }
     }
 
+    /// The loaded macro table, for tests and the parity harness.
+    pub fn macro_table(&self) -> &MacroTable {
+        &self.macro_table
+    }
+
     pub fn options(&self) -> &Options {
         &self.options
     }
@@ -158,6 +192,7 @@ impl Engine {
     pub fn set_options(&mut self, options: Options) {
         self.check_spelling = options.check_spelling;
         self.use_spell_checking_before = options.check_spelling;
+        self.macro_table.rebuild(options.charset);
         self.options = options;
     }
 
@@ -187,6 +222,15 @@ impl Engine {
     /// (`IS_DOUBLE_CODE`, `DataType.h:149`) and is adapter state.
     pub fn session_break(&mut self) -> Outcome {
         self.is_caps = false;
+        if !self.options.enabled {
+            // The English branch returns before the mouse handling
+            // (`OpenKey.mm:669-684`), so no session actually starts over. Only
+            // the per-event hook state is reset so a stale edit cannot leak.
+            self.hook.code = DO_NOTHING;
+            self.hook.backspaces = 0;
+            self.hook.new_chars = 0;
+            return self.outcome();
+        }
         self.dispatch(Source::Mouse, 0, 0, false);
         self.outcome()
     }
@@ -232,7 +276,14 @@ impl Engine {
         // `OTHER_CONTROL_KEY` is command, control or option (`OpenKey.mm:16`).
         let other_control = event.mods.ctrl || event.mods.alt || event.mods.cmd;
         self.dispatch(Source::Keyboard, data, caps_status, other_control);
-        self.outcome()
+        let mut outcome = self.outcome();
+        if outcome.action == Action::Macro {
+            // `handleMacro` ends with `SendKeyCode(_keycode | shift)`
+            // (`OpenKey.mm:574`): the break key that terminated the macro is
+            // typed after the expansion.
+            outcome.passthrough = Some(*event);
+        }
+        outcome
     }
 
     /// A forward delete, which upstream has no path for. The event is treated
@@ -253,6 +304,25 @@ impl Engine {
     /// `vKeyHandleEvent` (`Engine.cpp:1314-1558`) for Vietnamese mode.
     fn dispatch(&mut self, source: Source, data: u16, caps_status: u8, other_control: bool) {
         self.is_caps = caps_status == 1 || caps_status == 2;
+
+        if !self.options.enabled {
+            // English mode never reaches `vKeyHandleEvent`: the hook calls
+            // `vEnglishMode` and returns the event (`OpenKey.mm:669-684`). The
+            // macro tracker only runs when both macro flags are on; with either
+            // off the event is returned untouched and even the tracker is left
+            // alone.
+            self.hook.code = DO_NOTHING;
+            self.hook.backspaces = 0;
+            self.hook.new_chars = 0;
+            if source == Source::Keyboard
+                && self.options.use_macro
+                && self.options.use_macro_in_english
+            {
+                self.english_branch(source, data, other_control);
+            }
+            return;
+        }
+
         let word_break = source == Source::Mouse || is_break_code(data);
 
         if (is_number_key(data) && caps_status == 1)
@@ -270,6 +340,51 @@ impl Engine {
         }
     }
 
+    /// `vEnglishMode` (`Engine.cpp:1284-1312`).
+    ///
+    /// English mode has no word model, only the macro tracker. Unlike the
+    /// Vietnamese space branch it never sets `has_handled_macro`, and its break
+    /// test is `is_break_code && !is_char_key_code` — a comma is a break but is
+    /// also a character key, so it is kept in the key. Mouse events never get
+    /// here (`OpenKey.mm:669-684` only calls this for key down).
+    fn english_branch(&mut self, source: Source, data: u16, other_control: bool) {
+        self.hook.code = DO_NOTHING;
+        if source == Source::Mouse || (other_control && !self.is_caps) {
+            self.macro_key.clear();
+            self.will_temp_off_engine = false;
+        } else if data == KEY_SPACE {
+            if !self.has_handled_macro {
+                if let Some(content) = self.lookup_macro() {
+                    self.macro_data = content;
+                    self.hook.code = REPLACE_MACRO;
+                    self.hook.backspaces = self.macro_key.len() as u8;
+                }
+            }
+            self.macro_key.clear();
+            self.will_temp_off_engine = false;
+        } else if data == KEY_DELETE {
+            if self.macro_key.pop().is_none() {
+                self.will_temp_off_engine = false;
+            }
+        } else if is_break_code(data) && !is_char_key_code(data) {
+            self.macro_key.clear();
+            self.will_temp_off_engine = false;
+        } else if !self.will_temp_off_engine {
+            self.macro_key
+                .push(u32::from(data) | if self.is_caps { CAPS_MASK } else { 0 });
+        }
+    }
+
+    /// `findMacro(hMacroKey, hMacroData)` (`Macro.cpp:155-197`).
+    ///
+    /// The key vector is passed by reference upstream and is left mutated — it
+    /// is converted in place, and the auto-caps path lowercases what it probes —
+    /// so the caller's tracker must keep whatever comes back, hit or miss.
+    fn lookup_macro(&mut self) -> Option<Vec<u32>> {
+        let auto_caps = self.options.auto_caps_macro;
+        crate::macros::find_macro(&mut self.macro_key, &self.macro_table, auto_caps)
+    }
+
     /// The first branch of `vKeyHandleEvent` (`Engine.cpp:1321-1383`).
     fn break_branch(&mut self, source: Source, data: u16, word_break: bool) {
         self.hook.code = DO_NOTHING;
@@ -277,7 +392,23 @@ impl Engine {
         self.hook.new_chars = 0;
         self.hook.ext = 1;
 
-        if (self.options.quick_start_consonant || self.options.quick_end_consonant)
+        // The macro check comes first and is independent of `tempDisableKey`:
+        // a break key that matches a macro is consumed before quick consonants
+        // or restore can claim it (`Engine.cpp:1328-1334`).
+        let mut macro_hit = false;
+        if self.options.use_macro && is_macro_break_code(data) && !self.has_handled_macro {
+            if let Some(content) = self.lookup_macro() {
+                self.macro_data = content;
+                self.hook.code = REPLACE_MACRO;
+                self.hook.backspaces = self.macro_key.len() as u8;
+                self.has_handled_macro = true;
+                macro_hit = true;
+            }
+        }
+
+        if macro_hit {
+            // Nothing else claims the key.
+        } else if (self.options.quick_start_consonant || self.options.quick_end_consonant)
             && !self.temp_disable_key
             && is_macro_break_code(data)
         {
@@ -319,6 +450,19 @@ impl Engine {
             self.word.set_len(0);
         }
 
+        // The break key joins the macro tracker only when it is a character
+        // key; anything else ends the tracked run (`Engine.cpp:1367-1373`). The
+        // push happens even for a key that arrived with a control flag, exactly
+        // like upstream.
+        if self.options.use_macro {
+            if is_char_key {
+                self.macro_key
+                    .push(u32::from(data) | if self.is_caps { CAPS_MASK } else { 0 });
+            } else {
+                self.macro_key.clear();
+            }
+        }
+
         if self.options.upper_case_first_char {
             self.upper_case_status = if data == KEY_DOT {
                 1
@@ -335,7 +479,24 @@ impl Engine {
         if !self.temp_disable_key && self.check_spelling {
             self.check_spelling(true);
         }
-        if (self.options.quick_start_consonant || self.options.quick_end_consonant)
+        // A space-terminated macro is checked first, before quick consonants
+        // and restore, and the space still counts towards `spaceCount`
+        // (`Engine.cpp:1388-1394`).
+        let mut macro_hit = false;
+        if self.options.use_macro && !self.has_handled_macro {
+            if let Some(content) = self.lookup_macro() {
+                self.macro_data = content;
+                self.hook.code = REPLACE_MACRO;
+                self.hook.backspaces = self.macro_key.len() as u8;
+                self.space_count += 1;
+                self.has_handled_macro = true;
+                macro_hit = true;
+            }
+        }
+
+        if macro_hit {
+            // Nothing else claims the space.
+        } else if (self.options.quick_start_consonant || self.options.quick_end_consonant)
             && !self.temp_disable_key
             && self.check_quick_consonant()
         {
@@ -351,6 +512,12 @@ impl Engine {
         } else {
             self.hook.code = DO_NOTHING;
             self.space_count += 1;
+        }
+
+        // Unconditional, even when the macro just fired: the space ends the
+        // tracked run (`Engine.cpp:1404-1406`).
+        if self.options.use_macro {
+            self.macro_key.clear();
         }
 
         if self.options.upper_case_first_char && self.upper_case_status == 1 {
@@ -395,6 +562,11 @@ impl Engine {
             if self.check_spelling {
                 self.check_spelling(false);
             }
+        }
+        if self.options.use_macro {
+            // `hMacroKey.size() > 0` guard (`Engine.cpp:1451-1453`); `pop` on an
+            // empty vector is the same no-op.
+            self.macro_key.pop();
         }
         self.hook.backspaces = 0;
         self.hook.new_chars = 0;
@@ -463,6 +635,37 @@ impl Engine {
                 .set_len(self.key_states.len().saturating_sub(1));
         }
 
+        // "insert or replace key for macro feature" (`Engine.cpp:1517-1531`).
+        //
+        // A plain key is recorded as typed. A transformation replaced the last
+        // `backspaces` entries with the `new_chars` entries now at
+        // `index - backspaces`, so the tracker is rebuilt from the word instead
+        // of guessed. Upstream reads `TypingWord` past `_index` when the
+        // grammar moved a mark (`new_chars == backspaces + 1`); that slot is
+        // stale buffer state, so the window is clamped to the word and the
+        // deviation is recorded in the module docs.
+        if self.options.use_macro {
+            match self.hook.code {
+                DO_NOTHING => self
+                    .macro_key
+                    .push(u32::from(data) | if self.is_caps { CAPS_MASK } else { 0 }),
+                WILL_PROCESS | RESTORE => {
+                    let backspaces = usize::from(self.hook.backspaces);
+                    for _ in 0..backspaces {
+                        self.macro_key.pop();
+                    }
+                    let index = self.word.len();
+                    let start = index.saturating_sub(backspaces);
+                    let end = (start + usize::from(self.hook.new_chars)).min(index);
+                    for i in start..end {
+                        let entry = self.word.bits_at(i);
+                        self.macro_key.push(entry);
+                    }
+                }
+                _ => {}
+            }
+        }
+
         if self.options.upper_case_first_char {
             if self.word.len() == 1 && self.upper_case_status == 2 {
                 self.upper_case_first_character();
@@ -510,7 +713,17 @@ impl Engine {
     /// `saveWord()` (`Engine.cpp:381-416`).
     fn save_word(&mut self) {
         if self.hook.code == REPLACE_MACRO {
-            // The macro-history half of `saveWord` needs `hMacroData`.
+            // The macro's content is what was typed, so that is the history
+            // entry; it is chunked at `MAX_BUFF` and always stored at least
+            // once, even when the content is empty (`Engine.cpp:400-414`).
+            let mut chunk: Vec<u32> = Vec::new();
+            for (i, &entry) in self.macro_data.iter().enumerate() {
+                if i != 0 && i % MAX_LETTERS == 0 {
+                    self.typing_states.push(std::mem::take(&mut chunk));
+                }
+                chunk.push(entry);
+            }
+            self.typing_states.push(chunk);
             return;
         }
         if self.word.is_empty() {
@@ -1315,6 +1528,14 @@ impl Engine {
             self.word.or_bits(0, CAPS_MASK);
             self.hook.char_data[0] = charset::encode(self.bits(0), self.options.charset);
             self.upper_case_status = 0;
+            // Upstream writes `hMacroKey[0]` unguarded (`Engine.cpp:1050-1051`),
+            // which is out of bounds on an empty tracker; only the effect on an
+            // existing entry is observable, so the write is guarded.
+            if self.options.use_macro {
+                if let Some(first) = self.macro_key.first_mut() {
+                    *first |= CAPS_MASK;
+                }
+            }
         }
     }
 
@@ -1610,10 +1831,19 @@ impl Engine {
             WILL_PROCESS => (Action::Process, Some(edit())),
             RESTORE => (Action::Restore, Some(edit())),
             RESTORE_AND_START_NEW_SESSION => (Action::RestoreAndBreak, Some(edit())),
+            // `handleMacro` deletes the typed key, then sends the macro content
+            // (`OpenKey.mm:544-575`). `macroData` is in reading order, so its
+            // own renderer walks it forwards (`SendNewCharString(true)`).
+            REPLACE_MACRO => (
+                Action::Macro,
+                Some(Edit {
+                    backspaces: self.hook.backspaces,
+                    text: charset::render_macro(&self.macro_data, self.options.charset),
+                    beep: false,
+                }),
+            ),
             // `vBreakWord` is never assigned upstream (`DataType.h:60`).
-            2 => (Action::BreakWord, None),
-            // `vReplaceMaro` needs a macro table, which this port does not have.
-            _ => (Action::Macro, None),
+            _ => (Action::BreakWord, None),
         };
         Outcome {
             action,
@@ -1729,6 +1959,9 @@ mod tests {
             '0'..='9' => (Key::Digit(ch as u8 - b'0'), false),
             ' ' => (Key::Space, false),
             '.' => (Key::Dot, false),
+            ',' => (Key::Comma, false),
+            '-' => (Key::Minus, false),
+            '=' => (Key::Equals, false),
             '[' => (Key::LeftBracket, false),
             ']' => (Key::RightBracket, false),
             '\t' => (Key::Tab, false),
@@ -1751,11 +1984,14 @@ mod tests {
     /// `scripts/parity/harness.cpp`) and `openkey-cli`'s replay. Test-only.
     fn press(engine: &mut Engine, document: &mut String, ch: char) -> Outcome {
         let outcome = engine.apply(&key(ch));
+        let is_macro = outcome.action == Action::Macro;
         if let Some(edit) = &outcome.edit {
             let backspaces = usize::from(edit.backspaces);
             // Backspaces count characters, not bytes, exactly as in
-            // `openkey-cli`'s replay (`replay.rs::apply_edit`).
-            if backspaces > 0 && backspaces < Engine::MAX_BUFFER {
+            // `openkey-cli`'s replay (`replay.rs::apply_edit`). `handleMacro`
+            // has no `MAX_BUFF` guard (`OpenKey.mm:552-556`), so a macro edit
+            // deletes exactly what it says.
+            if backspaces > 0 && (is_macro || backspaces < Engine::MAX_BUFFER) {
                 let keep = document.chars().count().saturating_sub(backspaces);
                 *document = document.chars().take(keep).collect();
             }
@@ -1775,7 +2011,15 @@ mod tests {
                 }
             }
             Action::Restore | Action::RestoreAndBreak => document.push(ch),
-            Action::Process | Action::Macro => {}
+            Action::Process => {}
+            Action::Macro => {
+                // `handleMacro` retypes the break key after the expansion
+                // (`OpenKey.mm:574`), which is the outcome's passthrough.
+                let event = outcome
+                    .passthrough
+                    .expect("a macro outcome carries the break key");
+                document.push(event.text.unwrap_or(ch));
+            }
         }
         outcome
     }
@@ -2065,16 +2309,21 @@ mod tests {
     fn no_spelling_keeps_the_mark_on_a_cluster_the_check_would_refuse() {
         // `opt-no-spelling` pins `vieejt`, where both settings agree; the flag's
         // visible effect is on an invalid cluster (`Engine.cpp:1486`).
-        let mut valid = telex_with(|options| options.check_spelling = false);
-        assert_eq!(type_all(&mut valid, "vieejt"), "việt");
-        let mut off = telex_with(|options| options.check_spelling = false);
-        assert_eq!(type_all(&mut off, "zzas"), "zzá");
+        //
+        // The two inputs need separate engines (a second word typed onto the
+        // first is not what these cases mean), so the option set is named once
+        // and applied to each instead of repeating the builder call.
+        let no_spelling = |options: &mut Options| options.check_spelling = false;
+        assert_eq!(type_all(&mut telex_with(no_spelling), "vieejt"), "việt");
+        assert_eq!(type_all(&mut telex_with(no_spelling), "zzas"), "zzá");
         assert_eq!(type_all(&mut engine(), "zzas"), "zzas");
     }
 
     #[test]
-    fn option_combinations_read_the_same_as_the_corpus() {
-        // `options-combos.tsv`: crossings the single-flag rows cannot show.
+    fn option_combinations_keep_each_flag_effective() {
+        // `options-combos.tsv`: crossings the single-flag rows cannot show. The
+        // corpus rows pin the same documents through the reference engine; this
+        // test pins that each flag still does its own job when another is set.
         let mut start_quick = telex_with(|options| {
             options.quick_start_consonant = true;
             options.quick_telex = true;
@@ -2251,5 +2500,207 @@ mod tests {
             Encoded::Utf16(vec![0x0061, 0x0301])
         );
         assert_eq!(typing(Charset::Cp1258), Encoded::Bytes(vec![0x61, 0xEC]));
+    }
+
+    /// A Telex engine over the given macros, with the given flags switched on.
+    fn macro_engine(apply: impl FnOnce(&mut Options), macros: &[Macro]) -> Engine {
+        let mut options = Options::default();
+        apply(&mut options);
+        Engine::with_macros(options, macros)
+    }
+
+    fn ko_macros() -> Vec<Macro> {
+        vec![Macro::new("ko", "không")]
+    }
+
+    #[test]
+    fn a_space_terminated_macro_replaces_the_typed_key() {
+        // `findMacro` in the space branch sets `vReplaceMaro` with the key
+        // length as the backspace count (`Engine.cpp:1388-1394`) and
+        // `handleMacro` retypes the space (`OpenKey.mm:544-575`).
+        let mut engine = macro_engine(|_| {}, &ko_macros());
+        assert_eq!(type_all(&mut engine, "ko "), "không ");
+    }
+
+    #[test]
+    fn a_macro_can_be_terminated_by_any_of_its_break_keys() {
+        // Each case gets its own engine, like the parity harness: the comma
+        // that ends a macro is itself a character key and stays in the tracker.
+        for (input, expected) in [("ko,", "không,"), ("ko\n", "không\n"), ("ko.", "không.")] {
+            let mut engine = macro_engine(|_| {}, &ko_macros());
+            assert_eq!(type_all(&mut engine, input), expected, "{input:?}");
+        }
+    }
+
+    #[test]
+    fn minus_and_equals_are_macro_break_keys_too() {
+        // `_macroBreakCode` is return, comma, dot, slash, semicolon, quote,
+        // backslash, minus, equals (`Engine.cpp:30-32`); all nine also sit in
+        // `_breakCode`, so each ends the word and is retyped after the content.
+        for (input, expected) in [("ko-", "không-"), ("ko=", "không=")] {
+            let mut engine = macro_engine(|_| {}, &ko_macros());
+            assert_eq!(type_all(&mut engine, input), expected, "{input:?}");
+        }
+    }
+
+    #[test]
+    fn a_macro_outcome_deletes_the_key_and_retypes_the_break_key() {
+        let mut engine = macro_engine(|_| {}, &ko_macros());
+        engine.apply(&key('k'));
+        engine.apply(&key('o'));
+        let outcome = engine.apply(&key(' '));
+        assert_eq!(outcome.action, Action::Macro);
+        let edit = outcome.edit.expect("a macro carries its edit");
+        assert_eq!(edit.backspaces, 2);
+        assert_eq!(
+            edit.text,
+            Encoded::Utf16("không".encode_utf16().collect::<Vec<u16>>())
+        );
+        assert!(!edit.beep);
+        assert_eq!(outcome.passthrough.expect("the break key").key, Key::Space);
+    }
+
+    #[test]
+    fn a_key_outside_the_table_keeps_the_literal_text() {
+        let mut engine = macro_engine(|_| {}, &ko_macros());
+        assert_eq!(type_all(&mut engine, "ka "), "ka ");
+        // An empty table is the negative control the corpus row pins.
+        assert_eq!(type_all(&mut Engine::new(Options::default()), "ko "), "ko ");
+    }
+
+    #[test]
+    fn use_macro_off_never_matches() {
+        let mut engine = macro_engine(|o| o.use_macro = false, &ko_macros());
+        assert_eq!(type_all(&mut engine, "ko "), "ko ");
+    }
+
+    #[test]
+    fn a_backspace_shortens_the_tracked_key() {
+        // The delete branch pops one entry from `hMacroKey` in its final else
+        // (`Engine.cpp:1451-1453`), so the macro matches after the correction.
+        // `b` is not a Telex transformation key, unlike `x`.
+        let mut engine = macro_engine(|_| {}, &ko_macros());
+        assert_eq!(type_all(&mut engine, "kob\u{8} "), "không ");
+    }
+
+    #[test]
+    fn auto_caps_uppercases_the_first_letter_of_the_content() {
+        let mut engine = macro_engine(|o| o.auto_caps_macro = true, &ko_macros());
+        assert_eq!(type_all(&mut engine, "Ko "), "Không ");
+        assert_eq!(type_all(&mut engine, "ko "), "không ");
+    }
+
+    #[test]
+    fn auto_caps_off_leaves_a_capitalised_key_literal() {
+        let mut engine = macro_engine(|_| {}, &ko_macros());
+        assert_eq!(type_all(&mut engine, "Ko "), "Ko ");
+    }
+
+    #[test]
+    fn auto_caps_only_probes_when_the_second_key_changes() {
+        // `findMacro` only lowercases the rest and re-cases the content when
+        // `modifyCaseUnicode(key[1])` changed something (`Macro.cpp:168-196`);
+        // a capitalised second key leaves the first one untouched and the
+        // lookup misses.
+        let mut engine = macro_engine(|o| o.auto_caps_macro = true, &ko_macros());
+        assert_eq!(type_all(&mut engine, "kO "), "kO ");
+    }
+
+    #[test]
+    fn upper_case_first_char_writes_the_caps_bit_into_the_macro_key() {
+        // With auto-caps on but no caps write, the tracked key would be `ko`
+        // and the content would stay lower case; `upperCaseFirstCharacter`
+        // puts the bit on `hMacroKey[0]` (`Engine.cpp:1050-1051`), so the match
+        // goes through the auto-caps path and the content is capitalised.
+        let mut engine = macro_engine(
+            |o| {
+                o.auto_caps_macro = true;
+                o.upper_case_first_char = true;
+            },
+            &ko_macros(),
+        );
+        assert_eq!(type_all(&mut engine, "\nko "), "\nKhông ");
+    }
+
+    #[test]
+    fn english_mode_matches_only_when_macro_in_english_is_on() {
+        let mut on = macro_engine(
+            |o| {
+                o.enabled = false;
+                o.use_macro_in_english = true;
+            },
+            &ko_macros(),
+        );
+        assert_eq!(type_all(&mut on, "ko "), "không ");
+        assert_eq!(type_all(&mut on, "ka "), "ka ");
+
+        let mut off = macro_engine(|o| o.enabled = false, &ko_macros());
+        assert_eq!(type_all(&mut off, "ko "), "ko ");
+    }
+
+    #[test]
+    fn english_mode_does_not_run_the_vietnamese_transformations() {
+        let mut engine = macro_engine(
+            |o| {
+                o.enabled = false;
+                o.use_macro_in_english = true;
+            },
+            &ko_macros(),
+        );
+        assert_eq!(type_all(&mut engine, "as"), "as");
+        assert_eq!(type_all(&mut engine, "vieejt"), "vieejt");
+    }
+
+    #[test]
+    fn macro_content_may_hold_spaces_and_capitals() {
+        let table = [Macro::new("vn", "Việt Nam")];
+        let mut engine = Engine::with_macros(Options::default(), &table);
+        assert_eq!(type_all(&mut engine, "vn "), "Việt Nam ");
+    }
+
+    #[test]
+    fn an_empty_macro_content_still_deletes_the_typed_key() {
+        let table = [Macro::new("x", "")];
+        let mut engine = Engine::with_macros(Options::default(), &table);
+        assert_eq!(type_all(&mut engine, "x "), " ");
+    }
+
+    #[test]
+    fn the_macro_content_is_encoded_in_the_active_charset() {
+        let table = [Macro::new("vn", "Việt")];
+        let mut engine = Engine::with_macros(
+            Options {
+                charset: Charset::VniWindows,
+                ..Options::default()
+            },
+            &table,
+        );
+        engine.apply(&key('v'));
+        engine.apply(&key('n'));
+        let edit = engine.apply(&key(' ')).edit.expect("the macro fires");
+        assert_eq!(edit.backspaces, 2);
+        // `ệ` is the VNI-Windows `E|TONE_MASK` nặng cell 0xE465, which the
+        // charset sends as `e` then the 0xE4 glyph byte.
+        assert_eq!(
+            edit.text,
+            Encoded::Bytes(vec![0x56, 0x69, 0x65, 0xE4, 0x74])
+        );
+    }
+
+    #[test]
+    fn changing_the_charset_rebuilds_the_content_but_not_the_key() {
+        // `onTableCodeChange` re-converts only the content (`Macro.cpp:242-246`).
+        let table = [Macro::new("vn", "Việt")];
+        let mut engine = Engine::with_macros(Options::default(), &table);
+        engine.set_options(Options {
+            charset: Charset::Tcvn3,
+            ..Options::default()
+        });
+        engine.apply(&key('v'));
+        engine.apply(&key('n'));
+        let edit = engine.apply(&key(' ')).edit.expect("the macro fires");
+        // `ệ` in TCVN3 is the `E|TONE_MASK` nặng cell 0xD6 (one byte); the name
+        // `vn` is still the same key because only the content is re-converted.
+        assert_eq!(edit.text, Encoded::Bytes(vec![0x56, 0x69, 0xD6, 0x74]));
     }
 }

@@ -1,0 +1,52 @@
+# Macros: matching, capitalisation and English mode (C-009, plan §3 row 9).
+# id	method	options	input	expected	macros
+#
+# The sixth column is the case's macro table, `name=content;name=content`.
+# It is literal UTF-8 with no escape decoding, the first `=` splits a pair, and
+# `-` (or an absent column) is the empty table. A duplicate name is legal
+# because upstream `addMacro` replaces the content (Macro.cpp:216-232).
+#
+# Every expected value below was produced by the pinned harness
+# (scripts/parity/harness.cpp) for the row as written; none is hand-computed.
+
+# The live path: `use_macro` defaults to 1, so a table is enough.
+macro-space-match	telex	-	ko\s	không\s	ko=không
+# Negative control for the row above: the same input against no table at all is
+# the raw typed text. Without this pair a pass could come from the input alone.
+macro-space-no-table	telex	-	ko\s	ko\s
+# And the explicit empty table, so the `-` spelling of "none" is exercised too.
+macro-space-empty-cell	telex	-	ko\s	ko\s	-
+# A macro ends on the macro break codes, not only on space (Engine.cpp:1329);
+# the break key itself is typed afterwards (OpenKey.mm:574).
+macro-dot-break	telex	-	ko.	không.	ko=không
+macro-minus-break	telex	-	ko-	không-	ko=không
+# A backspace shortens the tracked key, so `kob` + backspace is `ko` again
+# (Engine.cpp:1451).
+macro-backspace	telex	-	kob\b\s	không\s	ko=không
+# The table is inert with the feature off.
+macro-off	telex	no-macro	ko\s	ko\s	ko=không
+# English mode: the Vietnamese engine never runs, only the macro matcher
+# (OpenKey.mm:669-684), and only with `macro-in-english`.
+macro-english-on	telex	english,macro-in-english	ko\s	không\s	ko=không
+macro-english-off	telex	english	ko\s	ko\s	ko=không
+# Auto-caps (README: `Btw` -> `By the way`, `BTW` -> `BY THE WAY`).
+macro-auto-caps-title	telex	auto-caps-macro	Btw\s	By\sthe\sway\s	btw=by the way
+macro-auto-caps-off	telex	-	Btw\s	Btw\s	btw=by the way
+macro-auto-caps-shout	telex	auto-caps-macro	BTW\s	BY\sTHE\sWAY\s	btw=by the way
+# upperCaseFirstCharacter writes the caps bit into the tracked key, which is
+# what lets a new sentence match a lowercase macro (Engine.cpp:1051).
+macro-upper-case-first	telex	upper-case-first,auto-caps-macro	\nko\s	\nKhông\s	ko=không
+# Content is free text: spaces and capitals survive.
+macro-two-words	telex	-	vn\s	Việt\sNam\s	vn=Việt Nam
+# An empty content still deletes the typed key and keeps the break key.
+macro-empty-content	telex	-	x\s	\s	x=
+# The first match consumes the key, so the second space is just a space
+# (`_hasHandledMacro`, Engine.cpp:1388).
+macro-space-twice	telex	-	ko\s\s	không\s\s	ko=không
+# A near miss stays literal.
+macro-near-miss	telex	-	koh\s	koh\s	ko=không
+# The table is keyed on keycodes, so a VNI case types its name as VNI.
+macro-vni-key	vni	-	vie65t\s	việt\s	vie65t=việt
+# Duplicate names replace, and only the first `=` splits a pair.
+macro-duplicate-name	telex	-	x\s	b\s	x=a;x=b
+macro-content-with-equals	telex	-	x\s	a=b\s	x=a=b
