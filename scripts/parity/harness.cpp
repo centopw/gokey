@@ -26,6 +26,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "Engine.h"
@@ -108,10 +109,23 @@ void apply(const Settings& s) {
 }
 
 // ---------------------------------------------------------------------------
-// Script parsing: `id \t method \t options \t input [\t expected]`.
+// Script parsing:
+//   `id \t method \t options \t input [\t expected] [\t macros]`.
 // `#` starts a comment, blank lines are skipped, the fifth column (expected text)
 // belongs to the corpus and is ignored here: this binary produces, it does not
 // judge.
+//
+// Exactly 4, 5 or 6 fields are accepted and a seventh is an error. A row that
+// silently loses (or gains) a column is a case that stopped being replayed, and
+// a green gate over a vanished case measures nothing (see
+// tests/corpus/README.md, "the loader is strict on purpose").
+//
+// The sixth column declares the macro table for that case:
+// `name=content;name=content`. It is literal UTF-8 with no escape decoding, `-`
+// or an absent column means the empty table, and the first `=` splits a pair
+// (so a content may contain `=`). A duplicate name is legal: `addMacro`
+// replaces the content (Macro.cpp:216-232). A malformed cell is an error, never
+// a skip.
 // ---------------------------------------------------------------------------
 
 struct Case {
@@ -119,6 +133,7 @@ struct Case {
     std::string method;
     std::string options;
     std::u32string input; // decoded: 0x08 backspace, 0x0a enter, 0x09 tab
+    std::vector<std::pair<std::string, std::string>> macros; // name, content
 };
 
 bool decodeInput(const std::string& raw, std::u32string& out, std::string& err) {
@@ -179,7 +194,9 @@ bool applyOptions(const std::string& raw, Settings& s, std::string& err) {
         size_t comma = raw.find(',', start);
         std::string flag = raw.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
         if (!flag.empty()) {
-            if (flag == "spelling") s.checkSpelling = 1;
+            if (flag == "english") s.language = 0;
+            else if (flag == "vietnamese") s.language = 1;
+            else if (flag == "spelling") s.checkSpelling = 1;
             else if (flag == "no-spelling") s.checkSpelling = 0;
             else if (flag == "modern-orthography") s.modernOrthography = 1;
             else if (flag == "quick-telex") s.quickTelex = 1;
@@ -207,6 +224,45 @@ bool applyOptions(const std::string& raw, Settings& s, std::string& err) {
         }
         if (comma == std::string::npos) break;
         start = comma + 1;
+    }
+    return true;
+}
+
+// The sixth corpus column: `name=content;name=content`, literal UTF-8, no
+// escape decoding (`-` or an absent column is the empty table). Strictness is
+// the point: a cell the loader cannot read must stop the run, because the
+// alternative is a case that replays against a table it did not ask for.
+bool parseMacros(const std::string& raw,
+                 std::vector<std::pair<std::string, std::string>>& out,
+                 std::string& err) {
+    out.clear();
+    if (raw == "-") return true;
+    if (raw.empty()) {
+        err = "empty macros cell (use `-` for the empty table)";
+        return false;
+    }
+    size_t start = 0;
+    while (true) {
+        size_t semicolon = raw.find(';', start);
+        std::string pair = raw.substr(
+            start, semicolon == std::string::npos ? std::string::npos : semicolon - start);
+        if (pair.empty()) {
+            err = "empty macro pair (pairs are separated by `;`, and a trailing `;` is a pair)";
+            return false;
+        }
+        size_t equals = pair.find('=');
+        if (equals == std::string::npos) {
+            err = "macro pair '" + pair + "' has no `=` (expected name=content)";
+            return false;
+        }
+        std::string name = pair.substr(0, equals);
+        if (name.empty()) {
+            err = "macro pair '" + pair + "' has an empty name";
+            return false;
+        }
+        out.push_back({name, pair.substr(equals + 1)});
+        if (semicolon == std::string::npos) break;
+        start = semicolon + 1;
     }
     return true;
 }
@@ -245,6 +301,41 @@ bool emitUnits(std::vector<uint16_t>& units, const vKeyHookState* s, std::string
         } else if (vCodeTable == 0) {
             // Unicode: the entry is the code point. _newCharString is UniChar, so
             // the high mask bits are truncated away (:453-454).
+            units.push_back(static_cast<uint16_t>(e & 0xFFFF));
+        } else {
+            char buf[96];
+            std::snprintf(buf, sizeof buf,
+                          "vCodeTable=%d is not modelled; K-003 emits Unicode only", vCodeTable);
+            err = buf;
+            return false;
+        }
+    }
+    return true;
+}
+
+bool emitMacroUnits(std::vector<uint16_t>& units, const vKeyHookState* s, std::string& err) {
+    // SendNewCharString(true), OpenKey.mm:423-480, called from handleMacro at
+    // :560-562. Unlike charData, macroData is sent from the first entry to the
+    // last (`_k = dataFromMacro ? offset : newCharCount - 1 - offset`, :429), so
+    // the document sees the expansion in reading order. The 16-unit chunking
+    // (:434-437) resumes with `offset += 16`; it changes how many events are
+    // posted, not the order or the content, so the model emits one sequence.
+    for (size_t i = 0; i < s->macroData.size(); i++) {
+        uint32_t e = s->macroData[i];
+        if (e & PURE_CHARACTER_MASK) {
+            units.push_back(static_cast<uint16_t>(e & 0xFFFF));
+        } else if (!(e & CHAR_CODE_MASK)) {
+            uint16_t ch = keyCodeToCharacter(e);
+            if (!ch) {
+                char buf[96];
+                std::snprintf(buf, sizeof buf,
+                              "macroData[%zu]=0x%x is a keycode with no character; the model would "
+                              "emit a NUL (OpenKey.mm:449)", i, e);
+                err = buf;
+                return false;
+            }
+            units.push_back(ch);
+        } else if (vCodeTable == 0) {
             units.push_back(static_cast<uint16_t>(e & 0xFFFF));
         } else {
             char buf[96];
@@ -329,10 +420,32 @@ bool press(std::u32string& doc, const vKeyHookState* s, uint32_t keyCode, bool c
             }
         }
     } else if (code == vReplaceMaro) {
-        // handleMacro() needs the macro table, which a fresh install does not
-        // have. Refuse rather than emit a document the app would not produce.
-        err = "vReplaceMaro requires a macro table; K-003 defines none, so this case cannot occur";
-        return false;
+        // handleMacro(), OpenKey.mm:544-575. The typed key becomes the
+        // expansion and the key that ended it is sent again, so the document
+        // ends up holding content plus the break key.
+        //
+        // The autocomplete workaround at :546-549 (SendEmptyCharacter then
+        // `backspaceCount++`) is deliberately not modelled: it emits U+202F /
+        // U+200C and immediately deletes one character, so it cannot change the
+        // document. MAC-002 is what would have to prove that on a real host.
+        //
+        // No `> MAX_BUFF` guard here, unlike the vWillProcess branch above:
+        // :551-556 sends exactly `backspaceCount` backspaces. That asymmetry is
+        // upstream's, so it is copied, not tightened.
+        if (bpc > 0) backspace(doc, bpc);
+        std::vector<uint16_t> units;
+        if (!emitMacroUnits(units, s, err)) return false;
+        appendUnits(doc, units);
+        // `SendKeyCode(_keycode | shift)` at :574 retypes the break key. A key
+        // with no character is re-posted as a key (:492-507 model), which for
+        // the macro break codes below means the same applyControlKey path the
+        // restore branch uses.
+        uint16_t retyped = keyCodeToCharacter(keyCode | (caps ? CAPS_MASK : 0));
+        if (retyped) {
+            doc.push_back(retyped);
+        } else if (!applyControlKey(doc, keyCode, err)) {
+            return false;
+        }
     } else {
         char buf[96];
         std::snprintf(buf, sizeof buf, "signal %u is not handled by OpenKey.mm", code);
@@ -434,8 +547,13 @@ int main(int argc, char** argv) {
             if (tab == std::string::npos) break;
             start = tab + 1;
         }
-        if (f.size() < 4) {
-            std::fprintf(stderr, "harness: line %d: expected >= 4 tab-separated fields, got %zu\n",
+        // Exactly 4, 5 or 6 fields: `id method options input [expected [macros]]`.
+        // A seventh is an error. Accepting it silently would let a hand-written
+        // row replay against a table nobody parsed (the same defect the Rust
+        // loader and compare.py refuse).
+        if (f.size() < 4 || f.size() > 6) {
+            std::fprintf(stderr,
+                         "harness: line %d: expected 4, 5 or 6 tab-separated fields, got %zu\n",
                          lineno, f.size());
             return 2;
         }
@@ -449,6 +567,10 @@ int main(int argc, char** argv) {
             std::fprintf(stderr, "harness: %s: %s\n", c.id.c_str(), err.c_str());
             return 3;
         }
+        if (f.size() > 5 && !parseMacros(f[5], c.macros, err)) {
+            std::fprintf(stderr, "harness: %s: macros: %s\n", c.id.c_str(), err.c_str());
+            return 3;
+        }
 
         Settings s = defaults();
         if (!setMethod(c.method, s, err) || !applyOptions(c.options, s, err)) {
@@ -457,9 +579,44 @@ int main(int argc, char** argv) {
         }
         apply(s);
 
+        // The table is built through upstream's own entry point after the
+        // settings are applied: `addMacro` converts both sides through
+        // `convert`, which reads `_codeTable[vCodeTable]` (Macro.cpp:29-65,
+        // :216-232), so the code table must already be selected. `initMacroMap`
+        // with no data clears the previous case's table (Macro.cpp:70-77).
+        initMacroMap(nullptr, 0);
+        for (size_t i = 0; i < c.macros.size(); i++) {
+            if (!addMacro(c.macros[i].first, c.macros[i].second)) {
+                std::fprintf(stderr, "harness: %s: addMacro failed\n", c.id.c_str());
+                return 3;
+            }
+        }
+
         // Fresh engine state per case, exactly as the app does on word break
-        // (vKeyInit, Engine.cpp:135-143).
+        // (vKeyInit, Engine.cpp:135-143). `vKeyInit` alone is not enough for a
+        // file of cases: it resets the typing buffer but not `tempDisableKey`,
+        // `_hasHandledMacro`, `_hasHandleQuickConsonant` or the HookState macro
+        // tracker. C-009 needs those, because a macro case that follows another
+        // macro case would otherwise be suppressed by `!_hasHandledMacro` and
+        // replay against an empty-looking table. `startNewSession`
+        // (Engine.cpp:457-466) is the engine's own new-document entry point and
+        // resets exactly that set, so it is called here, then the two
+        // HookState fields it does not own are cleared.
+        //
+        // Residual, deliberately: `TypingWord`, `_specialChar`, `_spaceCount`,
+        // `_upperCaseStatus` and `_typingStates` are file-static in Engine.cpp
+        // and have no public reset; the pinned tree may not be patched. They
+        // cannot be papered over either: the Rust port starts every case from a
+        // fresh engine, so any residue that changes a document would show up as
+        // a `--diff ref-engine` disagreement instead of a silent pass.
         vKeyHookState* state = static_cast<vKeyHookState*>(vKeyInit());
+        startNewSession();
+        state->code = vDoNothing;
+        state->extCode = 0;
+        state->backspaceCount = 0;
+        state->newCharCount = 0;
+        state->macroKey.clear();
+        state->macroData.clear();
         std::u32string doc;
 
         for (size_t i = 0; i < c.input.size(); i++) {
@@ -483,8 +640,22 @@ int main(int argc, char** argv) {
                 }
             }
 
-            vKeyHandleEvent(vKeyEvent::Keyboard, vKeyEventState::KeyDown,
-                            static_cast<Uint16>(keyCode), caps ? 1 : 0, false);
+            // English mode (OpenKey.mm:669-684). With vLanguage == 0 the hook
+            // never calls the Vietnamese engine: it either runs vEnglishMode
+            // (only when macro matching in English is on) or returns the event
+            // untouched. `OTHER_CONTROL_KEY` is the command/control/option mask
+            // (:16), and this harness presses none of them, so it passes false.
+            if (vLanguage == 0) {
+                state->code = vDoNothing;
+                state->backspaceCount = 0;
+                state->newCharCount = 0;
+                if (vUseMacro && vUseMacroInEnglishMode) {
+                    vEnglishMode(vKeyEventState::KeyDown, static_cast<Uint16>(keyCode), caps, false);
+                }
+            } else {
+                vKeyHandleEvent(vKeyEvent::Keyboard, vKeyEventState::KeyDown,
+                                static_cast<Uint16>(keyCode), caps ? 1 : 0, false);
+            }
 
             std::string emitted;
             if (!press(doc, state, keyCode, caps, typed, emitted, err)) return fail(c, err);

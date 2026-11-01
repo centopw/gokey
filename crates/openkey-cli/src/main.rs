@@ -414,6 +414,7 @@ mod tests {
             input: "vieejt".to_string(),
             input_raw: "vieejt".to_string(),
             expected: expected.map(str::to_string),
+            macros: Vec::new(),
             source: PathBuf::from("t.tsv"),
             line: 1,
         }

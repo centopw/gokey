@@ -1,19 +1,28 @@
-//! Parity corpus loader (K-005).
+//! Parity corpus loader (K-005, v2 in C-009).
 //!
 //! The format is the one owned by `tests/corpus/README.md`: one case per line,
-//! `id <TAB> method <TAB> options <TAB> input [<TAB> expected]`, with `#` starting
-//! a comment. Escapes are decoded exactly once here, with the same vocabulary the
-//! reference harness and `scripts/parity/compare.py` use (`\b \n \t \r \s \\`),
-//! and `-` means the empty document.
+//! `id <TAB> method <TAB> options <TAB> input [<TAB> expected [<TAB> macros]]`,
+//! with `#` starting a comment. Escapes are decoded exactly once here, with the
+//! same vocabulary the reference harness and `scripts/parity/compare.py` use
+//! (`\b \n \t \r \s \\`), and `-` means the empty document.
 //!
-//! The loader is strict on purpose: a line with fewer than four fields, an
-//! unknown escape, or a duplicate id is an error, not a skip. A case that
-//! silently disappears from a run is a green gate that measured nothing.
+//! The optional sixth field is the macro table, `name=content;name=content`.
+//! It is literal UTF-8 — the pairs are *not* escape-decoded, so a macro may
+//! contain a backslash without ambiguity — and `-` (or an absent field) is the
+//! empty table. Duplicates are allowed: upstream `addMacro` replaces
+//! (`Macro.cpp:216-232`).
+//!
+//! The loader is strict on purpose: a line with fewer than four or more than
+//! six fields, an unknown escape, a malformed macros cell, or a duplicate id is
+//! an error, not a skip. A case that silently disappears from a run is a green
+//! gate that measured nothing.
 
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
+
+use openkey_core::Macro;
 
 /// A decoded corpus case.
 #[derive(Debug, Clone)]
@@ -28,6 +37,9 @@ pub struct Case {
     pub input_raw: String,
     /// Expected column decoded, or `None` for a replay-only row.
     pub expected: Option<String>,
+    /// Macro table from the sixth column, in file order (a later pair replaces
+    /// an earlier one with the same name, as `addMacro` does).
+    pub macros: Vec<Macro>,
     pub source: PathBuf,
     pub line: usize,
 }
@@ -135,9 +147,9 @@ pub fn parse(text: &str, source: &Path) -> Result<Vec<Case>, Error> {
             continue;
         }
         let fields: Vec<&str> = line.split('\t').collect();
-        if fields.len() < 4 {
+        if fields.len() < 4 || fields.len() > 6 {
             return Err(Error::new(format!(
-                "{}:{}: expected at least 4 tab-separated fields, got {}",
+                "{}:{}: expected 4, 5 or 6 tab-separated fields, got {}",
                 source.display(),
                 line_no,
                 fields.len()
@@ -164,6 +176,14 @@ pub fn parse(text: &str, source: &Path) -> Result<Vec<Case>, Error> {
         } else {
             None
         };
+        let macros = if fields.len() > 5 {
+            parse_macros(
+                fields[5],
+                &format!("{}:{}: macros", source.display(), line_no),
+            )?
+        } else {
+            Vec::new()
+        };
         cases.push(Case {
             id: id.to_string(),
             method: fields[1].to_string(),
@@ -171,11 +191,46 @@ pub fn parse(text: &str, source: &Path) -> Result<Vec<Case>, Error> {
             input,
             input_raw,
             expected,
+            macros,
             source: source.to_path_buf(),
             line: line_no,
         });
     }
     Ok(cases)
+}
+
+/// Parse the sixth column: `name=content;name=content`, or `-` for none.
+///
+/// The cell is literal UTF-8; the escape vocabulary does not apply here. An
+/// empty cell, a pair without `=`, an empty name or an empty pair is an error
+/// rather than an empty table, so a typo cannot silently disable a case.
+pub fn parse_macros(raw: &str, where_: &str) -> Result<Vec<Macro>, Error> {
+    if raw == "-" {
+        return Ok(Vec::new());
+    }
+    if raw.is_empty() {
+        return Err(Error::new(format!(
+            "{where_}: empty macros cell (use `-` for the empty table)"
+        )));
+    }
+    let mut macros = Vec::new();
+    for pair in raw.split(';') {
+        if pair.is_empty() {
+            return Err(Error::new(format!("{where_}: empty macro pair in {raw:?}")));
+        }
+        let Some((name, content)) = pair.split_once('=') else {
+            return Err(Error::new(format!(
+                "{where_}: macro pair {pair:?} has no `=`"
+            )));
+        };
+        if name.is_empty() {
+            return Err(Error::new(format!(
+                "{where_}: macro pair {pair:?} has an empty name"
+            )));
+        }
+        macros.push(Macro::new(name, content));
+    }
+    Ok(macros)
 }
 
 /// Decode one field with the corpus escape vocabulary.
@@ -249,6 +304,7 @@ mod tests {
         assert_eq!(cases[0].id, "case-1");
         assert_eq!(cases[0].input, "aa");
         assert_eq!(cases[0].expected.as_deref(), Some("â"));
+        assert!(cases[0].macros.is_empty());
         assert_eq!(cases[1].expected, None);
         assert_eq!(cases[0].line, 3);
     }
@@ -260,9 +316,45 @@ mod tests {
     }
 
     #[test]
-    fn later_fields_do_not_create_a_case() {
-        // A comment marker after a tab is still data; only a leading `#` comments.
-        let cases = parse("case-1\ttelex\t-\taa\tâ\textra\n", &path()).unwrap();
-        assert_eq!(cases.len(), 1);
+    fn a_seventh_field_is_an_error_not_an_ignored_column() {
+        // Ignoring the extra column would let a case claim to test macros while
+        // running without a table.
+        let err = parse("case-1\ttelex\t-\taa\tâ\tko=không\textra\n", &path())
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("4, 5 or 6"), "{err}");
+    }
+
+    #[test]
+    fn the_sixth_field_is_the_macro_table() {
+        let text = "macro-1\ttelex\t-\tko \tkhông \tko=không;vn=Việt Nam\n\
+                    macro-2\ttelex\t-\tko \tko \t-\n";
+        let cases = parse(text, &path()).unwrap();
+        assert_eq!(cases[0].macros.len(), 2);
+        assert_eq!(cases[0].macros[0].name, "ko");
+        assert_eq!(cases[0].macros[0].content, "không");
+        assert_eq!(cases[0].macros[1].name, "vn");
+        assert_eq!(cases[0].macros[1].content, "Việt Nam");
+        assert!(cases[1].macros.is_empty());
+    }
+
+    #[test]
+    fn macro_pairs_are_literal_and_duplicates_are_kept() {
+        // No escape decoding: `\s` is a backslash and an `s` here.
+        let macros = parse_macros(r"a\s=a\n;dup=1;dup=2", "x").unwrap();
+        assert_eq!(macros[0].name, r"a\s");
+        assert_eq!(macros[0].content, r"a\n");
+        assert_eq!(macros.len(), 3, "a later pair replaces at build time");
+        assert_eq!(macros[2].content, "2");
+        assert!(parse_macros("-", "x").unwrap().is_empty());
+        // Empty content is legal; `addMacro` accepts any string.
+        assert_eq!(parse_macros("btw=", "x").unwrap()[0].content, "");
+    }
+
+    #[test]
+    fn malformed_macro_cells_are_errors() {
+        for cell in ["", ";", "ko", "=không", "ko=không;", ";ko=không"] {
+            assert!(parse_macros(cell, "x").is_err(), "{cell:?} must not parse");
+        }
     }
 }

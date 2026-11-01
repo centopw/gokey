@@ -199,11 +199,12 @@ Selectors, most specific first: an exact id, `id:<glob>` (`*`, `?`), and
 must resolve to exactly one block; two matches at the same specificity are
 ambiguous.
 
-Definition and activation are separate. All five blocks are defined at K-005
-(`telex`, `vni`, `simple`, `edit`, `opt`) so every case resolves and an
-unclassified case is always an error; `active:` starts empty and grows one line
-per task (C-002 `telex`, C-006 `edit`, C-003 `vni`, C-004 `simple`, C-008
-`opt`). At C-014 `active:` lists all five, so no skip path remains.
+Definition and activation are separate. All six blocks are defined at K-005
+(`telex`, `vni`, `simple`, `edit`, `opt`) plus C-009 (`macro`), so every case
+resolves and an unclassified case is always an error; `active:` starts empty and
+grows one line per task (C-002 `telex`, C-006 `edit`, C-003 `vni`, C-004
+`simple`, C-008 `opt`, C-009 `macro`). At C-014 `active:` lists all six, so no
+skip path remains.
 
 - A case in an inactive block is `SKIP` with the block name, and is neither
   replayed nor validated; the oracle half still replays every script, so a

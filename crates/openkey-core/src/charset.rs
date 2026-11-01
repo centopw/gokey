@@ -90,9 +90,9 @@ pub(crate) fn encode(bits: u32, charset: Charset) -> u32 {
 /// The variant follows the charset, not the content: Unicode and Unicode
 /// Compound produce UTF-16 units (a Compound vowel is a base unit plus a
 /// combining mark); TCVN3, VNI-Windows and CP1258 produce bytes. The one
-/// exception is a `PURE_CHARACTER` entry above `0xFF` — macro data, which this
-/// port has no table for — and it keeps the edit in `Utf16` rather than
-/// truncating to a byte that would be a different character.
+/// exception is a `PURE_CHARACTER` entry above `0xFF` — macro content that no
+/// code table carries — and it keeps the edit in `Utf16` rather than truncating
+/// to a byte that would be a different character.
 ///
 /// Panics when a bare keycode has no character: upstream would send a NUL
 /// (`OpenKey.mm:449`).
@@ -101,6 +101,27 @@ pub(crate) fn render(entries: &[u32], charset: Charset) -> Encoded {
     for (index, &bits) in entries.iter().enumerate().rev() {
         push_units(&mut units, bits, charset, index);
     }
+    finish(units, charset)
+}
+
+/// Render `macroData` the way `SendNewCharString(true)` sends it
+/// (`OpenKey.mm:423-480`, reached from `handleMacro` `:544-564`): **first
+/// entry first**.
+///
+/// Macro data is stored in reading order — `convert` (`Macro.cpp:29-65`)
+/// appends as it walks the text — unlike `charData`, which is stored last
+/// character first. The chunking `SendNewCharString` does at 16 units only
+/// affects how many synthetic key events are posted, not the resulting text.
+pub(crate) fn render_macro(entries: &[u32], charset: Charset) -> Encoded {
+    let mut units: Vec<u16> = Vec::with_capacity(entries.len());
+    for (index, &bits) in entries.iter().enumerate() {
+        push_units(&mut units, bits, charset, index);
+    }
+    finish(units, charset)
+}
+
+/// Choose the variant for an already-flattened unit list.
+fn finish(units: Vec<u16>, charset: Charset) -> Encoded {
     match charset {
         Charset::Unicode | Charset::UnicodeCompound => Encoded::Utf16(units),
         Charset::Tcvn3 | Charset::VniWindows | Charset::Cp1258 => {
@@ -179,7 +200,7 @@ pub(crate) fn character(bits: u32) -> Option<char> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tables::{KEY_D, KEY_I, KEY_Y};
+    use crate::tables::{KEY_D, KEY_G, KEY_H, KEY_I, KEY_K, KEY_N, KEY_Y};
 
     /// The five charsets in `_codeTable[]` order (`Vietnamese.cpp:405-410`).
     const CHARSETS: [Charset; 5] = [
@@ -593,6 +614,55 @@ mod tests {
                 "{charset:?}"
             );
         }
+    }
+
+    #[test]
+    fn macro_content_renders_in_reading_order() {
+        // `không` as `convert` stores it: k h ô n g.
+        let content = [
+            u32::from(KEY_K),
+            u32::from(KEY_H),
+            0x00F4 | CHAR_CODE_MASK,
+            u32::from(KEY_N),
+            u32::from(KEY_G),
+        ];
+        assert_eq!(
+            render_macro(&content, Charset::Unicode),
+            Encoded::Utf16(vec![0x006B, 0x0068, 0x00F4, 0x006E, 0x0067])
+        );
+        // A byte charset sends the TCVN3 cell for `ô` (O row, circumflex,
+        // lower case, 0xAB) instead of the Unicode code point; the content
+        // code is already in the active charset, as `convert` leaves it.
+        let tcvn3 = [u32::from(KEY_K), u32::from(KEY_H), 0x00AB | CHAR_CODE_MASK];
+        assert_eq!(
+            render_macro(&tcvn3, Charset::Tcvn3),
+            Encoded::Bytes(vec![0x6B, 0x68, 0xAB])
+        );
+    }
+
+    #[test]
+    fn pure_macro_content_is_never_truncated_to_a_byte() {
+        // C-005 debt (a): a `PURE_CHARACTER` payload is a UTF-16 unit with no
+        // table entry, so a byte charset must keep it as `Utf16` rather than
+        // send a different character.
+        assert_eq!(
+            render_macro(&[0x1EA5 | PURE_CHARACTER_MASK], Charset::Tcvn3),
+            Encoded::Utf16(vec![0x1EA5])
+        );
+        assert_eq!(
+            render_macro(&[0x1EA5 | PURE_CHARACTER_MASK], Charset::VniWindows),
+            Encoded::Utf16(vec![0x1EA5])
+        );
+        // C-005 debt (b): a sub-`0x100` unit travels unchanged, as its byte.
+        assert_eq!(
+            render_macro(&[0x009F | PURE_CHARACTER_MASK], Charset::Tcvn3),
+            Encoded::Bytes(vec![0x9F])
+        );
+        // Unicode keeps the unit either way.
+        assert_eq!(
+            render_macro(&[0x202F | PURE_CHARACTER_MASK], Charset::Unicode),
+            Encoded::Utf16(vec![0x202F])
+        );
     }
 
     #[test]

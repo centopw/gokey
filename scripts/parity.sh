@@ -28,7 +28,7 @@
 #     scope is never folded into green; pending outside it is skipped and named.
 #
 # Scope is `parity/scope.txt` (K-005 turn 3): every case resolves to exactly one
-# of the five blocks, `active:` decides which are judged. The judged/in-scope/
+# of the six blocks, `active:` decides which are judged. The judged/in-scope/
 # skipped counts are printed twice — a ::warning:: line and the job's step
 # summary — so a green job never reads as full parity. `--full` selects the file
 # set, never the judged set, or the nightly would go red again at C-002.

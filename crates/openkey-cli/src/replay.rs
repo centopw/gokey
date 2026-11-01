@@ -1,10 +1,15 @@
 //! Replay one corpus case through [`openkey_core::Engine`] (K-005).
 //!
-//! Telex, VNI and Simple Telex 1/2 are all implemented (C-002, C-003, C-004).
-//! A declared `todo!()` would still be reported as `engine-pending`, not as a
-//! disagreement: "the port has not been written yet" and "the port disagrees
-//! with the oracle" are different facts and must not collapse into the same
-//! exit code.
+//! Telex, VNI and Simple Telex 1/2 are all implemented (C-002, C-003, C-004),
+//! and the macro engine landed in C-009. A declared `todo!()` would still be
+//! reported as `engine-pending`, not as a disagreement: "the port has not been
+//! written yet" and "the port disagrees with the oracle" are different facts and
+//! must not collapse into the same exit code.
+//!
+//! The case's sixth column is a real macro table, not decoration: it is built
+//! through [`openkey_core::Engine::with_macros`], so a row that declares
+//! `ko=không` is replayed against that table. An empty table is the same code
+//! path with no entries, which is why every pre-C-009 expectation still holds.
 //!
 //! A panic aborts the rest of the case. After a panic the engine's buffer cannot
 //! be trusted, so continuing would report a document assembled from a broken
@@ -38,7 +43,7 @@ pub enum ReplayError {
 /// Replay a case and return its final document.
 pub fn run(case: &Case) -> Result<String, ReplayError> {
     let options = flags::options(case).map_err(ReplayError::Invalid)?;
-    let mut engine = Engine::new(options);
+    let mut engine = Engine::with_macros(options, &case.macros);
     let mut document = String::new();
 
     for typed in case.input.chars() {
@@ -215,7 +220,9 @@ fn letter(typed: char) -> Key {
 ///   (`:764-769`, `:423-480`), then any re-injected key.
 /// - `Restore` / `RestoreAndBreak`: as `Process`, then the pressed key is
 ///   re-sent as a character (`:483-491`), then any re-injected key.
-/// - `Macro`: the expansion replaces the typed sequence; nothing else is typed.
+/// - `Macro`: `backspaceCount` backspaces with **no** `MAX_BUFF` guard, then
+///   the expansion in reading order, then the break key is re-sent
+///   (`handleMacro`, `:544-575`).
 ///
 /// A byte-charset edit is refused rather than decoded: the document model here
 /// is a Unicode string, the corpus has no charset option to select one, and
@@ -250,38 +257,58 @@ pub fn apply_outcome(
             }
         }
         Action::Macro => {
+            // `handleMacro` sends exactly `backspaceCount` backspaces
+            // (`OpenKey.mm:551-556`) — unlike the word path, upstream does not
+            // gate them on `MAX_BUFF` here, so neither do we.
             if let Some(edit) = &outcome.edit {
-                apply_edit(document, edit)?;
+                let text = unicode_edit(edit)?;
+                delete_chars(document, edit.backspaces);
+                document.push_str(&text);
+            }
+            // `SendKeyCode(_keycode | shift)` at :574 re-sends the key that
+            // ended the macro, so the document ends with content + break key.
+            if let Some(event) = &outcome.passthrough {
+                type_event(document, event);
             }
         }
     }
     Ok(())
 }
 
-fn apply_edit(document: &mut String, edit: &Edit) -> Result<(), ReplayError> {
-    // Refuse a byte-charset edit before touching the document. Backspaces and
-    // text are one decision; applying the deletions and then failing would
-    // leave the document in a state the engine never produced.
-    let text = match &edit.text {
+/// Decode an edit's text, refusing a byte-charset edit before touching the
+/// document.
+///
+/// Backspaces and text are one decision; applying the deletions and then
+/// failing would leave a document the engine never produced.
+fn unicode_edit(edit: &Edit) -> Result<String, ReplayError> {
+    match &edit.text {
         // Every value in the five tables is BMP, so the loss-free decode here
         // and the harness's surrogate-aware `appendUnits` agree.
-        Encoded::Utf16(units) => String::from_utf16_lossy(units),
-        Encoded::Bytes(_) => {
-            return Err(ReplayError::Invalid(
-                "the engine emitted a byte-charset edit; the replay document is a Unicode \
-                 string and no corpus case can select a charset (C-005 adds no charset option)"
-                    .to_string(),
-            ));
-        }
-    };
+        Encoded::Utf16(units) => Ok(String::from_utf16_lossy(units)),
+        Encoded::Bytes(_) => Err(ReplayError::Invalid(
+            "the engine emitted a byte-charset edit; the replay document is a Unicode \
+             string and no corpus case can select a charset (C-005 adds no charset option)"
+                .to_string(),
+        )),
+    }
+}
+
+fn delete_chars(document: &mut String, count: u8) {
+    if count > 0 {
+        let len = document.chars().count();
+        let keep = len.saturating_sub(usize::from(count));
+        *document = document.chars().take(keep).collect();
+    }
+}
+
+fn apply_edit(document: &mut String, edit: &Edit) -> Result<(), ReplayError> {
+    let text = unicode_edit(edit)?;
     let count = edit.backspaces as usize;
     // Upstream applies the backspaces only when `0 < count < MAX_BUFF`
     // (`OpenKey.mm:764-769`). It is the app's condition, not a safety check of
     // ours, so it is copied rather than tightened.
     if count > 0 && count < Engine::MAX_BUFFER {
-        let len = document.chars().count();
-        let keep = len.saturating_sub(count);
-        *document = document.chars().take(keep).collect();
+        delete_chars(document, edit.backspaces);
     }
     document.push_str(&text);
     Ok(())
@@ -526,5 +553,69 @@ mod tests {
         };
         apply(&mut doc, 'x', &outcome(Action::Process, None, Some(enter)));
         assert_eq!(doc, "\n");
+    }
+
+    #[test]
+    fn a_macro_edit_deletes_even_at_the_word_path_guard() {
+        // The word path ignores a backspace count >= MAX_BUFF (`OpenKey.mm:764-769`)
+        // and there is a test above pinning that. handleMacro sends exactly
+        // `backspaceCount` (:551-556), so the same count must delete here.
+        let kept = 8;
+        let mut doc = "a".repeat(Engine::MAX_BUFFER + kept);
+        let edit = Edit {
+            backspaces: Engine::MAX_BUFFER as u8,
+            text: unicode("ok"),
+            beep: false,
+        };
+        let space = key_event(' ').unwrap();
+        apply(
+            &mut doc,
+            ' ',
+            &outcome(Action::Macro, Some(edit), Some(space)),
+        );
+        assert_eq!(doc, format!("{}ok ", "a".repeat(kept)));
+    }
+
+    #[test]
+    fn a_macro_outcome_retypes_the_key_that_ended_it() {
+        let mut doc = String::from("ko");
+        let edit = Edit {
+            backspaces: 2,
+            text: unicode("không"),
+            beep: false,
+        };
+        let comma = key_event(',').unwrap();
+        apply(
+            &mut doc,
+            ',',
+            &outcome(Action::Macro, Some(edit), Some(comma)),
+        );
+        assert_eq!(doc, "không,");
+    }
+
+    fn macro_case(macros: &[(&str, &str)]) -> Case {
+        Case {
+            id: "macro-t".to_string(),
+            method: "telex".to_string(),
+            options: "-".to_string(),
+            input: "ko ".to_string(),
+            input_raw: r"ko\s".to_string(),
+            expected: None,
+            macros: macros
+                .iter()
+                .map(|(name, content)| openkey_core::Macro::new(*name, *content))
+                .collect(),
+            source: std::path::PathBuf::from("t.tsv"),
+            line: 1,
+        }
+    }
+
+    #[test]
+    fn run_builds_the_case_macro_table() {
+        // The sixth column is not decoration: `run` must hand it to the engine.
+        assert_eq!(run(&macro_case(&[("ko", "không")])).unwrap(), "không ");
+        // Negative control: the same input against an empty table is the raw
+        // typed text, so a pass above cannot come from the input alone.
+        assert_eq!(run(&macro_case(&[])).unwrap(), "ko ");
     }
 }

@@ -27,6 +27,11 @@ pub fn options(case: &Case) -> Result<Options, String> {
         .filter(|flag| !flag.is_empty() && *flag != "-")
     {
         match flag {
+            // `vLanguage` (OpenKey.mm:670). English mode does not run the
+            // Vietnamese engine at all; only the macro matcher is reachable
+            // there, and only with `macro-in-english`.
+            "english" => options.enabled = false,
+            "vietnamese" => options.enabled = true,
             "spelling" => options.check_spelling = true,
             "no-spelling" => options.check_spelling = false,
             "modern-orthography" => options.modern_orthography = true,
@@ -83,6 +88,7 @@ mod tests {
             input: String::new(),
             input_raw: String::new(),
             expected: None,
+            macros: Vec::new(),
             source: PathBuf::from("t.tsv"),
             line: 1,
         }
@@ -125,5 +131,20 @@ mod tests {
         assert!(options(&case("telex", "free-mark")).unwrap().free_mark);
         let err = options(&case("telex", "send-key-step-by-step")).unwrap_err();
         assert!(err.contains("host state"), "{err}");
+    }
+
+    #[test]
+    fn english_and_vietnamese_select_the_language() {
+        assert!(!options(&case("telex", "english")).unwrap().enabled);
+        assert!(options(&case("telex", "vietnamese")).unwrap().enabled);
+        // The last flag wins, as it does upstream (`applyOptions` runs left to
+        // right).
+        assert!(
+            options(&case("telex", "english,vietnamese"))
+                .unwrap()
+                .enabled
+        );
+        // Defaults stay Vietnamese.
+        assert!(options(&case("telex", "-")).unwrap().enabled);
     }
 }
