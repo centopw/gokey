@@ -2296,13 +2296,93 @@ mod tests {
 
     #[test]
     fn upper_case_first_capitalises_after_a_stop_and_a_newline() {
-        // `Engine.cpp:1376-1381` sets `_upperCaseStatus`, `:1532` applies it at
+        // `Engine.cpp:1376-1383` sets `_upperCaseStatus` in `vKeyHandleEvent`'s
+        // word-break branch (gated at `:1321-1322`), `:1533-1538` applies it at
         // `_index == 1` (corpus `opt-upper-*`).
         let mut dot = telex_with(|options| options.upper_case_first_char = true);
         assert_eq!(type_all(&mut dot, ". vieejt"), ". Việt");
         let mut newline = telex_with(|options| options.upper_case_first_char = true);
         assert_eq!(type_all(&mut newline, "\nvieejt"), "\nViệt");
         assert_eq!(type_all(&mut engine(), ". vieejt"), ". việt");
+        // Only the word that opens the sentence takes the capital: the first
+        // main key cleared the status at `:1537`, so the second word is plain.
+        let mut sentence = telex_with(|options| options.upper_case_first_char = true);
+        assert_eq!(type_all(&mut sentence, ". vieejt hom"), ". Việt hom");
+        // Quick telex expands `cc` to `ch` at `_index == 2`, which `:1534` does
+        // not ask about, so the replacement stays lower case
+        // (corpus `combo-upper-quick`).
+        let mut quick = telex_with(|options| {
+            options.upper_case_first_char = true;
+            options.quick_telex = true;
+        });
+        assert_eq!(type_all(&mut quick, ". cc"), ". ch");
+    }
+
+    #[test]
+    fn upper_case_first_does_not_capitalise_without_a_space() {
+        // The stop sets 1 (`Engine.cpp:1376-1383`); only the space branch
+        // promotes it to 2 (`:1407-1409`), so the next word stays lower case.
+        let mut engine = telex_with(|options| options.upper_case_first_char = true);
+        assert_eq!(type_all(&mut engine, ".vieejt"), ".việt");
+    }
+
+    #[test]
+    fn upper_case_first_capitalises_each_sentence_after_its_own_stop() {
+        // The second stop re-arms the status, so both sentences take a capital
+        // and the text between them does not.
+        let mut engine = telex_with(|options| options.upper_case_first_char = true);
+        assert_eq!(type_all(&mut engine, ". vieejt . hoaf"), ". Việt . Hòa");
+        // A break that is neither a stop nor a newline clears the status in the
+        // same branch (`Engine.cpp:1381-1382`), so the comma does not arm it.
+        let mut comma = telex_with(|options| options.upper_case_first_char = true);
+        assert_eq!(type_all(&mut comma, ", vieejt"), ", việt");
+    }
+
+    #[test]
+    fn upper_case_first_survives_a_second_space_after_the_stop() {
+        // `Engine.cpp:1407` promotes only when the status is 1, so the second
+        // space leaves the 2 the first one set untouched.
+        let mut engine = telex_with(|options| options.upper_case_first_char = true);
+        assert_eq!(type_all(&mut engine, ".  vieejt"), ".  Việt");
+    }
+
+    #[test]
+    fn upper_case_first_leaves_a_capital_the_user_typed_alone() {
+        // `Engine.cpp:1043` guards on `CAPS_MASK`, so a shifted first letter is
+        // not re-processed: no second edit, no duplicated capital.
+        let mut engine = telex_with(|options| options.upper_case_first_char = true);
+        let mut document = String::new();
+        for ch in ". ".chars() {
+            press(&mut engine, &mut document, ch);
+        }
+        let outcome = press(&mut engine, &mut document, 'V');
+        assert!(
+            outcome.edit.is_none(),
+            "the guard must not re-emit the letter"
+        );
+        assert_eq!(document, ". V");
+        for ch in "ieejt".chars() {
+            press(&mut engine, &mut document, ch);
+        }
+        assert_eq!(document, ". Việt");
+    }
+
+    #[test]
+    fn upper_case_first_survives_a_delete_after_the_break() {
+        // The delete branch (`Engine.cpp:1420-1465`) never touches
+        // `_upperCaseStatus`, so the pending 2 still capitalises the next word.
+        let mut engine = telex_with(|options| options.upper_case_first_char = true);
+        assert_eq!(type_all(&mut engine, ". \u{8}vieejt"), ".Việt");
+    }
+
+    #[test]
+    fn upper_case_first_reencodes_the_first_letter_through_the_charset() {
+        // `Engine.cpp:1048` writes `hData[0] = GET(TypingWord[0])`: a charset
+        // encode of the capitalised letter, not an ASCII fold.
+        let mut engine = telex_with(|options| options.upper_case_first_char = true);
+        assert_eq!(type_all(&mut engine, ". dd"), ". Đ");
+        let mut ow = telex_with(|options| options.upper_case_first_char = true);
+        assert_eq!(type_all(&mut ow, ". ow"), ". Ơ");
     }
 
     #[test]

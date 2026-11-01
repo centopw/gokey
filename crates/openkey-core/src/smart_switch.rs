@@ -3,7 +3,7 @@
 //! Port of upstream `Sources/OpenKey/engine/SmartSwitchKey.cpp` (`initSmartSwitchKey`
 //! `:19-37`, `getSmartSwitchKeySaveData` `:39-52`, `getAppInputMethodStatus`
 //! `:54-67`, `setAppInputMethodStatus` `:69-73`) and of the three hook policies
-//! that drive it (`Sources/OpenKey/macOS/ModernKey/OpenKey.mm:207-242`).
+//! that drive it (`Sources/OpenKey/macOS/ModernKey/OpenKey.mm:207-243`).
 //!
 //! Upstream keeps the table in a file-static `map<string, Int8>` and the lookup
 //! cache in two more file statics (`:15-17`). Here the table, the cache and the
@@ -30,11 +30,12 @@
 //!   all rather than a half-filled one.
 //!
 //! What is *not* a difference: decoding the packed byte. Upstream's
-//! `vLanguage = _languageTemp` (`OpenKey.mm:211`) cannot be observed — the guard
-//! already isolates bit 0, the next line calls `onImputMethodChanged:NO`, which
-//! overwrites `vLanguage` with the toggled persisted `0/1`
+//! `vLanguage = _languageTemp` (`OpenKey.mm:212`) cannot be observed — the guard
+//! `:211` already isolates bit 0, the next line calls `onImputMethodChanged:NO`,
+//! which overwrites `vLanguage` with the toggled persisted `0/1`
 //! (`AppDelegate.m:427-437`), and because `willNotify` is `NO` the
-//! `OnInputMethodChanged` write-back (`:235`) is never reached on this path.
+//! `OnInputMethodChanged` write-back (`:237-243`) is never reached on this path
+//! (`AppDelegate.m:439-440` dispatches it only when the flag is set).
 //! `language = value & 1` and `charset = value >> 1` are therefore exactly what
 //! the app does for every value in `0..=9`.
 
@@ -273,7 +274,7 @@ pub const fn pack(language: bool, charset: Charset) -> u8 {
 ///
 /// Equivalent to upstream's use of the packed value for every byte in
 /// `0..=9` — see the module docs for why `vLanguage = _languageTemp`
-/// (`OpenKey.mm:211`) is not observable.
+/// (`OpenKey.mm:212`) is not observable.
 pub fn unpack(value: u8) -> Result<(bool, Charset), SmartSwitchError> {
     // `value >> 1 <= CHARSET_MAX` is the same bound as `value <= MAX_VALUE`.
     let charset = charset_from_index(value >> 1).ok_or(SmartSwitchError::ValueOutOfRange(value))?;
@@ -292,11 +293,11 @@ fn charset_from_index(index: u8) -> Option<Charset> {
 }
 
 /// What the host must do after the frontmost application changed
-/// (`OpenKey.mm:207-219`).
+/// (`OpenKey.mm:207-226`).
 ///
 /// `language` and `charset` are set only when that field differs from the
 /// current option, so the caller can apply them in order and start a new
-/// session once. `save` asks for `saveSmartSwitchKeyData` (`:17-21`): upstream
+/// session once. `save` asks for `saveSmartSwitchKeyData` (`:200-205`): upstream
 /// calls it when the application was unknown, i.e. when `get` just seeded it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ActiveAppSwitch {
@@ -314,7 +315,7 @@ impl ActiveAppSwitch {
     }
 }
 
-/// `OnActiveAppChanged` (`OpenKey.mm:207-219`).
+/// `OnActiveAppChanged` (`OpenKey.mm:207-226`).
 ///
 /// The comparisons are the upstream ones, including the arithmetic shift of the
 /// `-1` sentinel: `(-1) & 1 == 1` leaves English alone on a first sight, and
@@ -355,7 +356,7 @@ pub fn on_active_app_changed(
     switch
 }
 
-/// `OnInputMethodChanged` (`OpenKey.mm:231-237`): the user picked a language, so
+/// `OnInputMethodChanged` (`OpenKey.mm:237-243`): the user picked a language, so
 /// remember it for the frontmost application when the option is on.
 /// Returns whether the caller must save.
 ///
@@ -374,7 +375,7 @@ pub fn on_input_method_changed(
     true
 }
 
-/// `OnTableCodeChange` (`OpenKey.mm:221-229`): `onTableCodeChange()` has already
+/// `OnTableCodeChange` (`OpenKey.mm:228-235`): `onTableCodeChange()` has already
 /// rebuilt the tables, so remember the new charset for the frontmost
 /// application when the option is on. Returns whether the caller must save.
 ///
