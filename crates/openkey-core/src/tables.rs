@@ -11,7 +11,7 @@
 //! present this same domain; that mapping is the adapter's job (ADR-0002 D3).
 
 use crate::event::Key;
-use crate::options::Charset;
+use crate::options::{Charset, InputMethod};
 
 // `DataType.h:92-126`.
 pub(crate) const CAPS_MASK: u32 = 0x0001_0000;
@@ -242,34 +242,105 @@ pub(crate) fn is_macro_break_code(code: u16) -> bool {
     )
 }
 
-/// `IS_SPECIALKEY` for Telex (`DataType.h:133-137`).
-pub(crate) fn is_special_key_telex(code: u16) -> bool {
-    matches!(
-        code,
-        KEY_W
-            | KEY_E
-            | KEY_R
-            | KEY_O
-            | KEY_LEFT_BRACKET
-            | KEY_RIGHT_BRACKET
-            | KEY_A
-            | KEY_S
-            | KEY_D
-            | KEY_F
-            | KEY_J
-            | KEY_Z
-            | KEY_X
-    )
+/// `IS_SPECIALKEY` (`DataType.h:133-150`).
+///
+/// VNI treats the ten digit keys as its transformation keys. Simple Telex 1/2
+/// are refused before this function is reached (C-004); their arm here reuses
+/// the Telex set, which upstream narrows by dropping the bracket keys
+/// (`DataType.h:141-145`).
+pub(crate) fn is_special_key(method: InputMethod, code: u16) -> bool {
+    match method {
+        InputMethod::Vni => is_number_key(code),
+        InputMethod::Telex | InputMethod::SimpleTelex1 | InputMethod::SimpleTelex2 => {
+            matches!(
+                code,
+                KEY_W
+                    | KEY_E
+                    | KEY_R
+                    | KEY_O
+                    | KEY_LEFT_BRACKET
+                    | KEY_RIGHT_BRACKET
+                    | KEY_A
+                    | KEY_S
+                    | KEY_D
+                    | KEY_F
+                    | KEY_J
+                    | KEY_Z
+                    | KEY_X
+            )
+        }
+    }
 }
 
-/// `IS_KEY_DOUBLE` for Telex (`Engine.cpp:45-46`).
-pub(crate) fn is_key_double_telex(code: u16) -> bool {
-    matches!(code, KEY_A | KEY_O | KEY_E)
+/// `IS_KEY_DOUBLE` (`Engine.cpp:45-46`): `6` in VNI, the vowel itself in Telex.
+pub(crate) fn is_key_double(method: InputMethod, code: u16) -> bool {
+    match method {
+        InputMethod::Vni => code == KEY_6,
+        InputMethod::Telex | InputMethod::SimpleTelex1 | InputMethod::SimpleTelex2 => {
+            matches!(code, KEY_A | KEY_O | KEY_E)
+        }
+    }
 }
 
-/// `IS_MARK_KEY` for Telex (`Engine.cpp:53-54`).
-pub(crate) fn is_mark_key_telex(code: u16) -> bool {
-    matches!(code, KEY_S | KEY_F | KEY_R | KEY_J | KEY_X)
+/// `IS_KEY_D` (`Engine.cpp:42`): `9` in VNI.
+pub(crate) fn is_key_d(method: InputMethod, code: u16) -> bool {
+    match method {
+        InputMethod::Vni => code == KEY_9,
+        InputMethod::Telex | InputMethod::SimpleTelex1 | InputMethod::SimpleTelex2 => code == KEY_D,
+    }
+}
+
+/// `IS_KEY_Z` (`Engine.cpp:41`): `0` in VNI (remove the mark).
+pub(crate) fn is_key_z(method: InputMethod, code: u16) -> bool {
+    match method {
+        InputMethod::Vni => code == KEY_0,
+        InputMethod::Telex | InputMethod::SimpleTelex1 | InputMethod::SimpleTelex2 => code == KEY_Z,
+    }
+}
+
+/// `IS_KEY_W` (`Engine.cpp:43-44`): `7`/`8` in VNI (horn, breve).
+pub(crate) fn is_key_w(method: InputMethod, code: u16) -> bool {
+    match method {
+        InputMethod::Vni => matches!(code, KEY_7 | KEY_8),
+        InputMethod::Telex | InputMethod::SimpleTelex1 | InputMethod::SimpleTelex2 => code == KEY_W,
+    }
+}
+
+/// The `MARK*_MASK` a mark key applies (`Engine.cpp:1119-1131`), or `None` for
+/// a key that is not a mark key in this method (`IS_MARK_KEY`, `:53-54`).
+///
+/// `ProcessingChar` orders the keys S/F/R/X/J, i.e. `1/2/3/4/5` in VNI.
+pub(crate) fn mark_mask(method: InputMethod, code: u16) -> Option<u32> {
+    let index = match method {
+        InputMethod::Vni => match code {
+            KEY_1 => 0,
+            KEY_2 => 1,
+            KEY_3 => 2,
+            KEY_4 => 3,
+            KEY_5 => 4,
+            _ => return None,
+        },
+        InputMethod::Telex | InputMethod::SimpleTelex1 | InputMethod::SimpleTelex2 => match code {
+            KEY_S => 0,
+            KEY_F => 1,
+            KEY_R => 2,
+            KEY_X => 3,
+            KEY_J => 4,
+            _ => return None,
+        },
+    };
+    Some([MARK1_MASK, MARK2_MASK, MARK3_MASK, MARK4_MASK, MARK5_MASK][index])
+}
+
+/// `IS_KEY_F`, `IS_KEY_R` or `IS_KEY_X` for this method (`Engine.cpp:47-50`):
+/// these tones may not sit on a `c`/`t` ending (`Engine.cpp:488-493`).
+pub(crate) fn is_restricted_end_mark(method: InputMethod, code: u16) -> bool {
+    match method {
+        InputMethod::Vni => matches!(code, KEY_2 | KEY_3 | KEY_4),
+        InputMethod::Telex | InputMethod::SimpleTelex1 | InputMethod::SimpleTelex2 => {
+            matches!(code, KEY_F | KEY_R | KEY_X)
+        }
+    }
 }
 
 /// `IS_QUICK_TELEX_KEY` (`DataType.h:151-152`).

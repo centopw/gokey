@@ -1,10 +1,10 @@
 //! Replay one corpus case through [`openkey_core::Engine`] (K-005).
 //!
-//! Telex is the only input method the engine implements (C-002); VNI and Simple
-//! Telex 1/2 still end in `engine-pending`, not in a verdict. That is reported
-//! as its own status rather than as a disagreement: "the port has not been
-//! written yet" and "the port disagrees with the oracle" are different facts and
-//! must not collapse into the same exit code.
+//! Telex (C-002) and VNI (C-003) are the input methods the engine implements;
+//! Simple Telex 1/2 still ends in `engine-pending`, not in a verdict. That is
+//! reported as its own status rather than as a disagreement: "the port has not
+//! been written yet" and "the port disagrees with the oracle" are different
+//! facts and must not collapse into the same exit code.
 //!
 //! A panic aborts the rest of the case. After a panic the engine's buffer cannot
 //! be trusted, so continuing would report a document assembled from a broken

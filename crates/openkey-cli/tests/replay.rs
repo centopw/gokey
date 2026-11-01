@@ -209,16 +209,17 @@ fn an_all_inactive_scope_skips_every_case_and_is_green() {
 
 #[test]
 fn an_in_scope_pending_case_is_not_green() {
-    // Telex is implemented (C-002), VNI is not, so the telex row is judged and
-    // the VNI row is pending. The run is still red: one in-scope case has no
-    // verdict, and a judged neighbour must not make the run look green.
+    // Telex is implemented (C-002) and VNI is implemented (C-003), but Simple
+    // Telex 1/2 is not (C-004), so the telex row is judged and the Simple Telex
+    // row is pending. The run is still red: one in-scope case has no verdict,
+    // and a judged neighbour must not make the run look green.
     let run = scoped(
-        &["replay", "--corpus", &corpus("basic.tsv")],
-        "scope-active.txt",
+        &["replay", "--corpus", &corpus("pending-simple.tsv")],
+        "scope-pending.txt",
     );
     assert_eq!(run.code, 2, "{}", run.stdout);
-    assert_eq!(status_of(&run.stdout, "case-one"), Some("PASS"));
-    assert_eq!(status_of(&run.stdout, "case-two"), Some("PENDING"));
+    assert_eq!(status_of(&run.stdout, "case-five"), Some("PASS"));
+    assert_eq!(status_of(&run.stdout, "case-six"), Some("PENDING"));
     assert!(
         run.stdout
             .contains("scope: judged 1 / in-scope 2 / skipped 0"),
@@ -355,7 +356,7 @@ fn played_scripts() -> (PathBuf, Vec<PathBuf>) {
 }
 
 #[test]
-fn the_declared_scope_classifies_every_case_and_activates_telex_and_edit() {
+fn the_declared_scope_classifies_every_case_and_activates_telex_edit_and_vni() {
     let (scope, scripts) = played_scripts();
     assert_eq!(scripts.len(), 19, "18 corpus files + smoke");
 
@@ -384,11 +385,16 @@ fn the_declared_scope_classifies_every_case_and_activates_telex_and_edit() {
         "{}",
         run.stdout
     );
-    assert!(run.stdout.contains("active: telex, edit"), "{}", run.stdout);
+    assert!(
+        run.stdout.contains("active: telex, edit, vni"),
+        "{}",
+        run.stdout
+    );
 
     // Per file, the judged/skipped split must add up to that file's corpus: the
-    // 141 telex cases (132 corpus + 9 smoke) and the 52 edit cases are in scope,
-    // and the other 121 are skipped by name. A verdict may be PASS or FAIL —
+    // 141 telex cases (132 corpus + 9 smoke), the 52 edit cases and the 55 VNI
+    // cases are in scope, and the other 66 are skipped by name. A verdict may
+    // be PASS or FAIL —
     // parity completeness is not this test's subject — but an in-scope case left
     // unjudged is exit 2 and is a scope defect, not an engine result.
     let mut skipped = 0usize;
@@ -435,11 +441,11 @@ fn the_declared_scope_classifies_every_case_and_activates_telex_and_edit() {
         skipped += counts[2];
     }
     assert_eq!(
-        in_scope, 193,
-        "the telex and edit blocks are the active ones"
+        in_scope, 248,
+        "the telex, edit and vni blocks are the active ones"
     );
     assert_eq!(
-        skipped, 121,
-        "everything outside the telex and edit blocks is skipped"
+        skipped, 66,
+        "everything outside the telex, edit and vni blocks is skipped"
     );
 }
