@@ -84,7 +84,7 @@ macros (no I/O, no unsafe)”, which covers what I had split across four crates.
 | `platforms/*.h` keycodes | `openkey-{macos,windows,linux}` → `openkey_core::KeyEvent` | Engine stays keycode-free, as `lib.rs` already requires |
 | `Macro.cpp` | `openkey-core` (macros) + `openkey-platform` (persistence) | lib.rs places macros in core; file format is a product decision |
 | `SmartSwitchKey.cpp` | `openkey-platform` (`AppId` already exists) | Per-app language |
-| `ConvertTool.cpp` | `openkey-cli` | Off the typing path |
+| `ConvertTool.cpp` | `openkey-core::convert` + `openkey-cli convert` | Off the typing path; machine in core, I/O in the CLI shell |
 | Hook glue (`OpenKey.mm` / `OpenKey.cpp`) | `openkey-*` adapters | The `Edit` contract is the seam |
 
 Function-level map with line references: `porting-map.tsv` (66 rows, one per symbol, with a

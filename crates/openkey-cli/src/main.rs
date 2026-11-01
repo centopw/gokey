@@ -22,8 +22,12 @@ mod report;
 mod scope;
 
 use std::collections::BTreeMap;
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
+
+use openkey_core::Charset;
+use openkey_core::convert::{ConvertOptions, convert as transcode, decode, encode};
 
 use refengine::RefEngine;
 use report::{Row, ScopedCounts, Summary, escape, first_difference};
@@ -36,6 +40,9 @@ USAGE:
     openkey replay --corpus <path> [--scope <path>] [--diff ref-engine] [--ref <path>]
                    [--allow-missing-expected]
     openkey scope --scope <path> --corpus <path> [--corpus <path>...]
+    openkey convert --from <charset> --to <charset> [--all-caps | --all-non-caps]
+                    [--caps-first-letter | --caps-each-word] [--remove-mark]
+                    [--input <path>] [--output <path>]
 
 OPTIONS:
     --corpus <path>             A .tsv file or a directory searched recursively.
@@ -54,10 +61,18 @@ OPTIONS:
                                 skip. CI never passes this: a dropped tab would
                                 otherwise remove a case from the gate silently.
 
+CONVERT:
+    Transcode text between `unicode`, `tcvn3`, `vni`, `unicode-compound` and
+    `cp1258` (ConvertTool.cpp, off the typing path). Reads --input or stdin and
+    writes --output or stdout. With no caps flag the converter lowercases the
+    text: upstream's normal form (ConvertTool.cpp:159-160), not a
+    case-preserving transcode. --remove-mark writes the base letter.
+
 EXIT STATUS:
     0  every in-scope case was judged and passed (with --scope: zero in-scope
-       cases is also green, because nothing declared is unjudged)
-    1  at least one case failed
+       cases is also green, because nothing declared is unjudged); `convert`
+       completed
+    1  at least one case failed; or `convert` hit a usage, encoding or I/O error
     2  no verdict could be produced (engine pending, invalid row, corpus, scope or
        reference-engine error, or an empty unscoped run)";
 
@@ -89,6 +104,15 @@ fn main() -> ExitCode {
             Err(message) => {
                 eprintln!("error: {message}");
                 ExitCode::from(2)
+            }
+        },
+        // `convert` owns exit 1 for its own failures; 2 stays reserved for the
+        // harness commands' "no verdict".
+        "convert" => match convert_command(args.collect()) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(message) => {
+                eprintln!("error: {message}");
+                ExitCode::from(1)
             }
         },
         other => {
@@ -335,6 +359,106 @@ fn scope_command(args: Vec<String>) -> Result<u8, String> {
     println!("scope blocks: {}", table.join(", "));
     println!("{scope}");
     Ok(0)
+}
+
+/// `openkey convert`: a thin I/O shell around `openkey_core::convert`.
+///
+/// The machine lives in core because the tables there are `pub(crate)`; this
+/// function only parses the six flags, moves bytes, and maps failures to exit 1
+/// (D1, contract §4).
+fn convert_command(args: Vec<String>) -> Result<(), String> {
+    let mut from: Option<Charset> = None;
+    let mut to: Option<Charset> = None;
+    let mut options = ConvertOptions::default();
+    let mut input: Option<PathBuf> = None;
+    let mut output: Option<PathBuf> = None;
+
+    let mut args = args.into_iter();
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--from" => from = Some(parse_charset(&next_value(&mut args, "--from")?)?),
+            "--to" => to = Some(parse_charset(&next_value(&mut args, "--to")?)?),
+            "--all-caps" => options.all_caps = true,
+            "--all-non-caps" => options.all_non_caps = true,
+            "--caps-first-letter" => options.caps_first_letter = true,
+            "--caps-each-word" => options.caps_each_word = true,
+            "--remove-mark" => options.remove_mark = true,
+            "--input" => input = Some(PathBuf::from(next_value(&mut args, "--input")?)),
+            "--output" => output = Some(PathBuf::from(next_value(&mut args, "--output")?)),
+            "--help" | "-h" => {
+                println!("{USAGE}");
+                return Ok(());
+            }
+            other => return Err(format!("unknown convert argument {other:?}")),
+        }
+    }
+
+    let from = from.ok_or_else(|| "convert needs --from <charset>".to_string())?;
+    let to = to.ok_or_else(|| "convert needs --to <charset>".to_string())?;
+
+    let mut bytes = Vec::new();
+    match &input {
+        Some(path) => {
+            bytes = std::fs::read(path).map_err(|err| format!("{}: {err}", path.display()))?
+        }
+        None => {
+            std::io::stdin()
+                .read_to_end(&mut bytes)
+                .map_err(|err| format!("stdin: {err}"))?;
+        }
+    }
+
+    let units =
+        decode(&bytes, from).map_err(|err| format!("--from {}: {err}", charset_name(from)))?;
+    let converted = transcode(
+        &units,
+        &ConvertOptions {
+            from,
+            to,
+            ..options
+        },
+    );
+    let encoded =
+        encode(&converted, to).map_err(|err| format!("--to {}: {err}", charset_name(to)))?;
+
+    match &output {
+        Some(path) => {
+            std::fs::write(path, &encoded).map_err(|err| format!("{}: {err}", path.display()))?;
+        }
+        None => {
+            std::io::stdout()
+                .write_all(&encoded)
+                .map_err(|err| format!("stdout: {err}"))?;
+        }
+    }
+    Ok(())
+}
+
+fn next_value(args: &mut impl Iterator<Item = String>, flag: &str) -> Result<String, String> {
+    args.next().ok_or_else(|| format!("{flag} needs a value"))
+}
+
+fn parse_charset(name: &str) -> Result<Charset, String> {
+    match name {
+        "unicode" => Ok(Charset::Unicode),
+        "tcvn3" => Ok(Charset::Tcvn3),
+        "vni" => Ok(Charset::VniWindows),
+        "unicode-compound" => Ok(Charset::UnicodeCompound),
+        "cp1258" => Ok(Charset::Cp1258),
+        other => Err(format!(
+            "unknown charset {other:?}; expected unicode, tcvn3, vni, unicode-compound or cp1258"
+        )),
+    }
+}
+
+fn charset_name(charset: Charset) -> &'static str {
+    match charset {
+        Charset::Unicode => "unicode",
+        Charset::Tcvn3 => "tcvn3",
+        Charset::VniWindows => "vni",
+        Charset::UnicodeCompound => "unicode-compound",
+        Charset::Cp1258 => "cp1258",
+    }
 }
 
 fn judge(case: &corpus::Case, actual: &str, reference: Option<&str>, allow_missing: bool) -> Row {
