@@ -1677,6 +1677,13 @@ mod tests {
         })
     }
 
+    /// A Telex engine over the default profile with the given flags switched on.
+    fn telex_with(apply: impl FnOnce(&mut Options)) -> Engine {
+        let mut options = Options::default();
+        apply(&mut options);
+        Engine::new(options)
+    }
+
     fn key(ch: char) -> KeyEvent {
         let (key, shift) = match ch {
             'a'..='z' => (
@@ -1965,6 +1972,152 @@ mod tests {
             ..Options::default()
         });
         assert_eq!(type_all(&mut j, "jis"), "jí");
+    }
+
+    #[test]
+    fn modern_orthography_widens_the_mark_position() {
+        // `oà, uý` instead of `òa, úy`; the traditional spellings are the macOS
+        // first-run default (corpus `opt-modern-*`, `opt-trad-*`).
+        for (input, widened, traditional) in [
+            ("hoaf", "hoà", "hòa"),
+            ("thuys", "thuý", "thúy"),
+            ("khoer", "khoẻ", "khỏe"),
+        ] {
+            assert_eq!(type_all(&mut engine(), input), traditional, "{input}");
+            let mut modern = telex_with(|options| options.modern_orthography = true);
+            assert_eq!(type_all(&mut modern, input), widened, "{input}");
+        }
+    }
+
+    #[test]
+    fn quick_telex_expands_the_seven_documented_pairs() {
+        // `cc=ch, gg=gi, kk=kh, nn=ng, qq=qu, pp=ph, tt=th` (corpus
+        // `opt-quick-*`): the second key of the pair performs the expansion.
+        for (input, expanded) in [
+            ("cc", "ch"),
+            ("gg", "gi"),
+            ("kk", "kh"),
+            ("nn", "ng"),
+            ("qq", "qu"),
+            ("pp", "ph"),
+            ("tt", "th"),
+        ] {
+            assert_eq!(type_all(&mut engine(), input), input, "{input}");
+            let mut quick = telex_with(|options| options.quick_telex = true);
+            assert_eq!(type_all(&mut quick, input), expanded, "{input}");
+        }
+    }
+
+    #[test]
+    fn zfwj_keeps_the_letter_literal_when_the_flag_is_on() {
+        // `opt-zfwj-z` / `opt-zfwj-f`: the flag widens the onset set for marks
+        // (`allow_zfwj_changes_whether_z_and_j_can_start_a_syllable` pins that
+        // side); it does not rewrite the letter itself.
+        let mut z = telex_with(|options| options.allow_consonant_zfwj = true);
+        assert_eq!(type_all(&mut z, "z"), "z");
+        let mut f = telex_with(|options| options.allow_consonant_zfwj = true);
+        assert_eq!(type_all(&mut f, "f"), "f");
+    }
+
+    #[test]
+    fn quick_start_consonant_expands_on_the_break_key() {
+        // The lookup runs from the break branches and returns early while
+        // `_index <= 1` (`Engine.cpp:1238`, `:1333`), so `f` alone never becomes
+        // `ph`; the break key stays in the document (corpus `opt-start-*`).
+        let mut bare = telex_with(|options| options.quick_start_consonant = true);
+        assert_eq!(type_all(&mut bare, "fa"), "fa");
+        let mut f = telex_with(|options| options.quick_start_consonant = true);
+        assert_eq!(type_all(&mut f, "fa "), "pha ");
+        let mut j = telex_with(|options| options.quick_start_consonant = true);
+        assert_eq!(type_all(&mut j, "ja "), "gia ");
+        let mut caps = telex_with(|options| options.quick_start_consonant = true);
+        assert_eq!(type_all(&mut caps, "Fan "), "Phan ");
+
+        // Recorded upstream quirk: `w` is rewritten to `ư` on insert
+        // (`Engine.cpp:1186`) before the break-time lookup reads the first
+        // letter, so the documented `w->qu` shortcut cannot match here.
+        // Bug-for-bug parity (DL-026); the corpus pins `ưa `.
+        let mut w = telex_with(|options| options.quick_start_consonant = true);
+        assert_eq!(type_all(&mut w, "wa "), "ưa ");
+    }
+
+    #[test]
+    fn quick_end_consonant_expands_on_the_break_key() {
+        for (input, expanded) in [("ag ", "ang "), ("ah ", "anh "), ("ak ", "ach ")] {
+            let mut quick = telex_with(|options| options.quick_end_consonant = true);
+            assert_eq!(type_all(&mut quick, input), expanded, "{input}");
+        }
+        assert_eq!(type_all(&mut engine(), "ag "), "ag ");
+    }
+
+    #[test]
+    fn upper_case_first_capitalises_after_a_stop_and_a_newline() {
+        // `Engine.cpp:1376-1381` sets `_upperCaseStatus`, `:1532` applies it at
+        // `_index == 1` (corpus `opt-upper-*`).
+        let mut dot = telex_with(|options| options.upper_case_first_char = true);
+        assert_eq!(type_all(&mut dot, ". vieejt"), ". Việt");
+        let mut newline = telex_with(|options| options.upper_case_first_char = true);
+        assert_eq!(type_all(&mut newline, "\nvieejt"), "\nViệt");
+        assert_eq!(type_all(&mut engine(), ". vieejt"), ". việt");
+    }
+
+    #[test]
+    fn no_spelling_keeps_the_mark_on_a_cluster_the_check_would_refuse() {
+        // `opt-no-spelling` pins `vieejt`, where both settings agree; the flag's
+        // visible effect is on an invalid cluster (`Engine.cpp:1486`).
+        let mut valid = telex_with(|options| options.check_spelling = false);
+        assert_eq!(type_all(&mut valid, "vieejt"), "việt");
+        let mut off = telex_with(|options| options.check_spelling = false);
+        assert_eq!(type_all(&mut off, "zzas"), "zzá");
+        assert_eq!(type_all(&mut engine(), "zzas"), "zzas");
+    }
+
+    #[test]
+    fn option_combinations_read_the_same_as_the_corpus() {
+        // `options-combos.tsv`: crossings the single-flag rows cannot show.
+        let mut start_quick = telex_with(|options| {
+            options.quick_start_consonant = true;
+            options.quick_telex = true;
+        });
+        assert_eq!(type_all(&mut start_quick, "fa "), "pha ");
+
+        let mut end_modern = telex_with(|options| {
+            options.quick_end_consonant = true;
+            options.modern_orthography = true;
+        });
+        assert_eq!(type_all(&mut end_modern, "ag "), "ang ");
+
+        let mut zfwj_quick = telex_with(|options| {
+            options.allow_consonant_zfwj = true;
+            options.quick_telex = true;
+        });
+        assert_eq!(type_all(&mut zfwj_quick, "zz"), "zz");
+
+        // `upper-case-first` does not reach the two letters quick Telex expands
+        // to: capitalisation applies at the first inserted character only.
+        let mut upper_quick = telex_with(|options| {
+            options.upper_case_first_char = true;
+            options.quick_telex = true;
+        });
+        assert_eq!(type_all(&mut upper_quick, ". cc"), ". ch");
+
+        let mut upper_modern = telex_with(|options| {
+            options.upper_case_first_char = true;
+            options.modern_orthography = true;
+        });
+        assert_eq!(type_all(&mut upper_modern, ". hoaf"), ". Hoà");
+
+        let mut upper_nospell = telex_with(|options| {
+            options.upper_case_first_char = true;
+            options.check_spelling = false;
+        });
+        assert_eq!(type_all(&mut upper_nospell, ". hoaf"), ". Hòa");
+
+        let mut modern_nospell = telex_with(|options| {
+            options.modern_orthography = true;
+            options.check_spelling = false;
+        });
+        assert_eq!(type_all(&mut modern_nospell, "thuys"), "thuý");
     }
 
     #[test]

@@ -53,3 +53,8 @@ active: vni
 # C-004 activates `simple`: the Simple Telex 1/2 files and the smoke
 # `simple-telex-1` are judged from here on. `opt` stays skipped by name.
 active: simple
+
+# C-008 activates `opt`: the options and options-combos files are judged from
+# here on. This is the last block, so nothing stays skipped by name and
+# `skipped 0` becomes the steady state; the skip path itself leaves with C-014.
+active: opt
