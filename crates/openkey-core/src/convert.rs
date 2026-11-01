@@ -55,6 +55,11 @@ pub enum ConvertError {
     /// [`encode`] was handed a lone UTF-16 surrogate. A Unicode target cannot
     /// write it, and UTF-8 cannot carry one.
     UnpairedSurrogate,
+    /// [`encode`] was asked to write `unit` into a byte charset that has no
+    /// byte for it. The port refuses rather than truncating (contract D2,
+    /// rev. r2): the pin passes such text through, so silently dropping the
+    /// high bits would lose a character.
+    Unrepresentable(u16),
 }
 
 impl fmt::Display for ConvertError {
@@ -62,6 +67,10 @@ impl fmt::Display for ConvertError {
         match self {
             Self::InvalidUtf8 => formatter.write_str("input is not valid UTF-8"),
             Self::UnpairedSurrogate => formatter.write_str("unpaired UTF-16 surrogate"),
+            Self::Unrepresentable(unit) => write!(
+                formatter,
+                "U+{unit:04X} is not representable in this charset"
+            ),
         }
     }
 }
@@ -97,9 +106,12 @@ pub fn compound_mark_index(mark: u16) -> u16 {
 /// The input is in `options.from`'s cell space: a byte charset is one unit per
 /// byte, Unicode Compound is a base unit optionally followed by a combining
 /// tone mark, and Unicode is the text itself. The output is in `options.to`'s
-/// cell space, except for the last unit of a byte/compound target, which takes
-/// upstream's primary path and stays a bare cell (`:150`) — see [`encode`] for
-/// how the file boundary normalises it.
+/// file form, because both of upstream's emit sites go through [`emit_cell`]:
+/// **the last unit of a cell emits exactly as the same cell does mid-string**,
+/// instead of the bare `push_back(target)` at `:150`. That is the port's one
+/// deviation from `convertUtil` (contract D2, rev. r2); provenance lives here,
+/// where the machine knows a cell was produced, so [`encode`] never has to
+/// guess from a unit's value.
 pub fn convert(input: &[u16], options: &ConvertOptions) -> Vec<u16> {
     let mut output = Vec::with_capacity(input.len());
     let mut has_break = false;
@@ -141,11 +153,13 @@ pub fn convert(input: &[u16], options: &ConvertOptions) -> Vec<u16> {
             }
         }
 
-        // `:103-152`: the primary path reads one unit of the source.
+        // `:103-152`: the primary path reads one unit of the source. Its emit
+        // is the same one the pair path uses — the pin's bare `push_back`
+        // (`:150`) is the deviation this port does not reproduce (D2, r2).
         let unit = input[i];
         if let Some((key, column)) = find_key_code(u32::from(unit), options.from) {
             if let Some(target) = target_cell(options, should_upper, key, column) {
-                output.push(target);
+                emit_cell(target, options.to, &mut output);
                 should_upper = false;
                 has_break = false;
                 i += 1;
@@ -220,9 +234,10 @@ fn target_cell(
     Some(target)
 }
 
-/// The pair path's emit (`:107-123`): a byte target splits a cell into its low
-/// and high byte, a compound target splits the mark tag off, and the Unicode
-/// and TCVN3 targets push the cell unchanged.
+/// A cell's emit, shared by both paths (`:107-123` on the pair path and the
+/// primary path's `:150` after D2, rev. r2): a byte target splits a cell into
+/// its low and high byte, a compound target splits the mark tag off, and the
+/// Unicode and TCVN3 targets push the cell unchanged.
 fn emit_cell(target: u16, charset: Charset, output: &mut Vec<u16>) {
     match charset {
         Charset::Unicode | Charset::Tcvn3 => output.push(target),
@@ -289,48 +304,23 @@ pub fn decode(bytes: &[u8], charset: Charset) -> Result<Vec<u16>, ConvertError> 
 
 /// Encode converted units for the target charset at the file boundary.
 ///
-/// This is the **only** place the port deviates from `convertUtil` (contract
-/// D2): the pin splits a byte/compound cell only on its pair path (`:107-123`)
-/// and pushes the last unit bare (`:150`), so a file would end in an
-/// unsplittable `0xE465`/`0xA0EA` that no VNI/Compound reader accepts. Every
-/// unit goes through its charset's own pair-path emit here, including the last:
-/// VNI/CP1258 split when the high byte is above 32, Unicode Compound emits
-/// `unit & 0x1FFF` plus the mark its tag names, TCVN3 writes one byte, and
-/// Unicode writes UTF-8 (a surrogate pair combines; a lone surrogate is an
-/// error).
+/// This is a **plain encoder**: [`convert`] has already applied the charset's
+/// pair-path emit to every cell, including the last, so nothing is decomposed
+/// here (contract D2, rev. r2). Unicode and Unicode Compound write UTF-8 of the
+/// units (a surrogate pair combines; a lone surrogate is an error); VNI, CP1258
+/// and TCVN3 write one byte per unit and **refuse** a unit above `0xFF` with
+/// [`ConvertError::Unrepresentable`] instead of truncating it.
 pub fn encode(units: &[u16], charset: Charset) -> Result<Vec<u8>, ConvertError> {
     match charset {
-        Charset::Unicode => utf8_units(units),
-        Charset::UnicodeCompound => {
-            let mut decomposed = Vec::with_capacity(units.len() * 2);
-            for &unit in units {
-                let index = unit >> 13;
-                if index == 0 {
-                    decomposed.push(unit);
-                } else if let Some(&mark) = UNICODE_COMPOUND_MARKS.get(usize::from(index) - 1) {
-                    decomposed.push(unit & 0x1FFF);
-                    decomposed.push(mark);
-                } else {
-                    // Not a cell tag: a surrogate or a high code point passes
-                    // through so an astral character survives the round trip.
-                    decomposed.push(unit);
-                }
-            }
-            utf8_units(&decomposed)
-        }
-        Charset::VniWindows | Charset::Cp1258 => {
+        Charset::Unicode | Charset::UnicodeCompound => utf8_units(units),
+        Charset::VniWindows | Charset::Cp1258 | Charset::Tcvn3 => {
             let mut bytes = Vec::with_capacity(units.len());
             for &unit in units {
-                if ((unit >> 8) & 0xFF) > 32 {
-                    bytes.push((unit & 0xFF) as u8);
-                    bytes.push((unit >> 8) as u8);
-                } else {
-                    bytes.push((unit & 0xFF) as u8);
-                }
+                let byte = u8::try_from(unit).map_err(|_| ConvertError::Unrepresentable(unit))?;
+                bytes.push(byte);
             }
             Ok(bytes)
         }
-        Charset::Tcvn3 => Ok(units.iter().map(|&unit| (unit & 0xFF) as u8).collect()),
     }
 }
 
@@ -449,6 +439,22 @@ mod tests {
             ..ConvertOptions::default()
         };
         assert_eq!(text(&convert(&units("việt nam"), &options)), "VIỆT NAM");
+    }
+
+    #[test]
+    fn all_caps_alone_demotes_an_already_uppercase_accented_cell() {
+        // The reader trap of `all_caps` (contract §2.1 b, rev. r2, probed):
+        // only the caps-first/each flags arm `shouldUpperCase` (`:58-59`), so
+        // the `!shouldUpperCase` disjunct at `:136` demotes the even
+        // `[UPPER, lower]` cell. Plain ASCII letters are not table characters
+        // and stay uppercase through `towupper` (`:157-158`).
+        let options = ConvertOptions {
+            from: Charset::Unicode,
+            to: Charset::Unicode,
+            all_caps: true,
+            ..ConvertOptions::default()
+        };
+        assert_eq!(text(&convert(&units("VIỆT NAM"), &options)), "VIệT NAM");
     }
 
     // --- §2.1 case c -------------------------------------------------------
@@ -576,9 +582,11 @@ mod tests {
     // --- §2.1 case h -------------------------------------------------------
 
     #[test]
-    fn only_the_pair_path_splits_a_byte_or_compound_cell() {
+    fn every_cell_emits_identically_mid_string_and_last() {
         // `:107-123` splits a cell on the pair path; the last unit takes the
-        // primary path, whose emit is the bare `push_back(target)` at `:150`.
+        // primary path, whose pin emit is the bare `push_back(target)` at
+        // `:150`. The port's one deviation (D2, rev. r2): the primary path uses
+        // the same `emit_cell`, so a cell emits identically in both positions.
         assert_eq!(
             convert(
                 &units("việt"),
@@ -591,7 +599,7 @@ mod tests {
                 &units("việ"),
                 &options(Charset::Unicode, Charset::VniWindows)
             ),
-            vec![0x0076, 0x0069, 0xE465]
+            vec![0x0076, 0x0069, 0x0065, 0x00E4]
         );
         assert_eq!(
             convert(
@@ -605,20 +613,64 @@ mod tests {
                 &units("việ"),
                 &options(Charset::Unicode, Charset::UnicodeCompound)
             ),
-            vec![0x0076, 0x0069, 0xA0EA]
+            vec![0x0076, 0x0069, 0x00EA, 0x0323]
         );
         // TCVN3 is single-byte, so both paths push the same cell.
         assert_eq!(
             convert(&units("việt"), &options(Charset::Unicode, Charset::Tcvn3)),
             vec![0x0076, 0x0069, 0x00D6, 0x0074]
         );
+        assert_eq!(
+            convert(&units("việ"), &options(Charset::Unicode, Charset::Tcvn3)),
+            vec![0x0076, 0x0069, 0x00D6]
+        );
 
-        // D2: the file boundary splits the last unit too.
-        assert_eq!(encode(&[0xE465], Charset::VniWindows), Ok(vec![0x65, 0xE4]));
+        // `encode` never re-decomposes: the pin's bare cells are now simply
+        // units, so a VNI cell above 0xFF is unrepresentable and the Compound
+        // `0xA0EA` is written as the code point it is.
+        assert_eq!(
+            encode(&[0xE465], Charset::VniWindows),
+            Err(ConvertError::Unrepresentable(0xE465))
+        );
         assert_eq!(
             encode(&[0xA0EA], Charset::UnicodeCompound),
-            Ok(vec![0xC3, 0xAA, 0xCC, 0xA3])
+            Ok("\u{A0EA}".as_bytes().to_vec())
         );
+    }
+
+    #[test]
+    fn every_target_passes_non_vietnamese_text_through_the_machine() {
+        // The regression at 659c3a8: keying the split on the unit value also
+        // fired on ordinary BMP text. `中` is not a table character, so the
+        // machine leaves it alone for every target (contract AC-1, rev. r2).
+        for to in CHARSETS {
+            assert_eq!(
+                convert(&units("a中b"), &options(Charset::Unicode, to)),
+                units("a中b"),
+                "{to:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn only_the_utf8_targets_can_write_non_vietnamese_text() {
+        // The machine passes `中` through; the file boundary can only carry it
+        // for the two UTF-8 charsets. A byte target refuses rather than
+        // truncating (D2, rev. r2).
+        for charset in [Charset::Unicode, Charset::UnicodeCompound] {
+            assert_eq!(
+                encode(&units("中"), charset),
+                Ok("中".as_bytes().to_vec()),
+                "{charset:?}"
+            );
+        }
+        for charset in [Charset::Tcvn3, Charset::VniWindows, Charset::Cp1258] {
+            assert_eq!(
+                encode(&units("中"), charset),
+                Err(ConvertError::Unrepresentable(0x4E2D)),
+                "{charset:?}"
+            );
+        }
     }
 
     // --- §2.1 case i -------------------------------------------------------
@@ -771,8 +823,8 @@ mod tests {
         // decode -> convert -> encode, the path the CLI runs. The law is
         // stability, not identity: the normal form lowercases, and TCVN3
         // stores Á and á in one cell, so `A -> B -> A` is `A -> A` rather than
-        // the input. `encode` also normalises the cell representation, which
-        // is why a primary-path bare cell and a pair-path split compare equal.
+        // the input. The machine's emit is position-independent (case h), which
+        // is what makes the byte representation stable across the trip.
         for from in CHARSETS {
             for to in CHARSETS {
                 let direct = transcode_bytes(&seed(from), from, from);
@@ -784,10 +836,10 @@ mod tests {
     }
 
     #[test]
-    fn only_the_utf8_targets_carry_an_astral_character_across_a_file() {
+    fn only_the_utf8_targets_can_write_an_astral_character() {
         // The converter-level test above keeps an astral character for every
-        // pair; at the *file* boundary only the two UTF-8 charsets can carry
-        // it. Pinned so the 8-bit limit is visible instead of implied.
+        // pair; at the *file* boundary only the two UTF-8 charsets can write
+        // it. A byte target refuses instead of truncating (D2, rev. r2).
         let emoji = units("😀");
         for charset in [Charset::Unicode, Charset::UnicodeCompound] {
             let converted = convert(&emoji, &options(Charset::Unicode, charset));
@@ -795,17 +847,13 @@ mod tests {
             assert_eq!(decode(&bytes, charset), Ok(emoji.clone()), "{charset:?}");
         }
 
-        // TCVN3 writes one byte per unit, so the pair collapses to `=` NUL.
-        let tcvn3 = convert(&emoji, &options(Charset::Unicode, Charset::Tcvn3));
-        assert_eq!(encode(&tcvn3, Charset::Tcvn3), Ok(vec![0x3D, 0x00]));
-
-        // VNI and CP1258 write low then high byte, but the reader recombines
-        // only real cells, so the halves come back as two units.
-        for charset in [Charset::VniWindows, Charset::Cp1258] {
+        for charset in [Charset::Tcvn3, Charset::VniWindows, Charset::Cp1258] {
             let converted = convert(&emoji, &options(Charset::Unicode, charset));
-            let bytes = encode(&converted, charset).expect("eight-bit output never fails");
-            assert_eq!(bytes, vec![0x3D, 0xD8, 0x00, 0xDE], "{charset:?}");
-            assert_ne!(decode(&bytes, charset), Ok(emoji.clone()), "{charset:?}");
+            assert_eq!(
+                encode(&converted, charset),
+                Err(ConvertError::Unrepresentable(0xD83D)),
+                "{charset:?}"
+            );
         }
     }
 
@@ -862,8 +910,20 @@ mod tests {
             encode(&[0xD83D], Charset::UnicodeCompound),
             Err(ConvertError::UnpairedSurrogate)
         );
-        // The byte charsets take any byte.
+        // The byte charsets take any byte and refuse any unit above 0xFF,
+        // naming the code point so a user can find it in the document.
         assert_eq!(decode(&[0xFF], Charset::VniWindows), Ok(vec![0xFF]));
         assert_eq!(encode(&[0xFF], Charset::Tcvn3), Ok(vec![0xFF]));
+        for charset in [Charset::Tcvn3, Charset::VniWindows, Charset::Cp1258] {
+            assert_eq!(
+                encode(&[0x4E2D], charset),
+                Err(ConvertError::Unrepresentable(0x4E2D)),
+                "{charset:?}"
+            );
+        }
+        assert_eq!(
+            ConvertError::Unrepresentable(0x4E2D).to_string(),
+            "U+4E2D is not representable in this charset"
+        );
     }
 }

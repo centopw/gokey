@@ -143,6 +143,32 @@ fn a_compound_target_normalises_the_last_unit() {
 }
 
 #[test]
+fn a_cjk_character_passes_through_the_utf8_targets() {
+    // The regression at 659c3a8: the old boundary split keyed on the unit
+    // value alone and mangled `中`. The machine passes it through and the
+    // plain encoder writes it as UTF-8 for the two UTF-8 targets.
+    for to in ["unicode", "unicode-compound"] {
+        let output = convert(&["convert", "--from", "unicode", "--to", to], "中");
+        assert_eq!(code(&output), 0, "{to}: {}", stderr(&output));
+        assert_eq!(stdout(&output), "中".as_bytes(), "{to}");
+    }
+}
+
+#[test]
+fn a_cjk_character_is_refused_by_a_byte_target() {
+    // A byte charset has no byte for U+4E2D; the command exits 1 and names the
+    // code point instead of truncating it (D2, rev. r2).
+    for to in ["tcvn3", "vni", "cp1258"] {
+        let output = convert(&["convert", "--from", "unicode", "--to", to], "中");
+        assert_eq!(code(&output), 1, "{to}");
+        let message = stderr(&output);
+        assert!(message.contains("U+4E2D"), "{to}: {message}");
+        assert!(message.contains(to), "{to}: {message}");
+        assert_eq!(stdout(&output), b"", "{to}: no partial file");
+    }
+}
+
+#[test]
 fn an_unknown_charset_is_a_usage_error() {
     let output = convert(&["convert", "--from", "latin1", "--to", "unicode"], "a");
     assert_eq!(code(&output), 1);
