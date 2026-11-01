@@ -92,10 +92,11 @@ guessed at. A baseline that encodes a guess is worse than a missing case.
 - Code tables other than Unicode — `vCodeTable != 0` is an error (`:447-454`).
 - A table-less `vReplaceMaro`: a case with **no** `macros` column that reports it
   is refused, because a fresh install has no macro table, so the result cannot
-  occur (`OpenKey.mm:679-680`). A case that *does* declare a table is modelled
-  through upstream `handleMacro` (row above). The refusal keys on the
-  declaration, not on the expansion being non-empty — `x=` is a declared table
-  with empty content.
+  occur (the English dispatch `OpenKey.mm:679-680` and the main dispatch
+  `OpenKey.mm:786-787` both only fire on a match). A case that *does* declare a
+  table is modelled through upstream `handleMacro` (row above). The refusal keys
+  on the declaration, not on the expansion being non-empty — `x=` is a declared
+  table with empty content.
 - Control keys other than Delete/Return/Tab — no modelled plain-text-field effect.
 - Per-application behaviour (browser recommendation, Spotlight, terminals),
   focus changes, and the window manager's own handling of re-posted keys.
