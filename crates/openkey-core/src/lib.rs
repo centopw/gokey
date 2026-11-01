@@ -23,6 +23,7 @@ pub mod event;
 #[path = "macro.rs"]
 pub mod macros;
 pub mod options;
+pub mod smart_switch;
 mod tables;
 mod word;
 
@@ -30,3 +31,7 @@ pub use engine::{Engine, Letter, Mark, Word};
 pub use event::{Action, Edit, Encoded, Ext, Key, KeyEvent, Mods, Outcome, Phase};
 pub use macros::{Macro, MacroTable, find_macro};
 pub use options::{Charset, InputMethod, Options};
+pub use smart_switch::{
+    ActiveAppSwitch, SmartSwitchError, SmartSwitchKey, on_active_app_changed,
+    on_input_method_changed, on_table_code_change, pack, unpack,
+};
