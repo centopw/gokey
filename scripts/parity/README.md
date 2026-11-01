@@ -75,6 +75,7 @@ just verified — and picks the same `std::find`.
 | `charData` emitted from `newCharCount-1` **down to 0** | `:430-432` |
 | `charData` entries truncated to `UniChar` (16-bit), so mask bits above U+FFFF are dropped | `:453-454` |
 | `vRestore` also re-sends the pressed key as a character when it has one, else re-posts the control key | `:483-491`, `:492-507` |
+| `vReplaceMaro` → `backspaceCount` backspaces, then `macroData` from first to last (reading order), then the break key retyped | `:544-575` |
 | Emitted UTF-16 units are decoded as code points (surrogate pairs preserved) | `:423` |
 
 Keycodes come from upstream's own `_characterMap` (`Vietnamese.cpp:508+`,
@@ -89,8 +90,12 @@ guessed at. A baseline that encodes a guess is worse than a missing case.
 - `vSendKeyStepByStep` — the option `send-key-step-by-step` is rejected; only the
   default `0` path is implemented (`OpenKey.mm:770-782`).
 - Code tables other than Unicode — `vCodeTable != 0` is an error (`:447-454`).
-- `vReplaceMaro` — requires a macro table; a fresh install has none, so the case
-  cannot occur and is refused.
+- A table-less `vReplaceMaro`: a case with **no** `macros` column that reports it
+  is refused, because a fresh install has no macro table, so the result cannot
+  occur (`OpenKey.mm:679-680`). A case that *does* declare a table is modelled
+  through upstream `handleMacro` (row above). The refusal keys on the
+  declaration, not on the expansion being non-empty — `x=` is a declared table
+  with empty content.
 - Control keys other than Delete/Return/Tab — no modelled plain-text-field effect.
 - Per-application behaviour (browser recommendation, Spotlight, terminals),
   focus changes, and the window manager's own handling of re-posted keys.
@@ -103,17 +108,18 @@ guessed at. A baseline that encodes a guess is worse than a missing case.
 Scripts are the corpus format from `tests/corpus/README.md`:
 
 ```
-id <TAB> method <TAB> options <TAB> input [<TAB> expected]
+id <TAB> method <TAB> options <TAB> input [<TAB> expected [<TAB> macros]]
 ```
 
 - `method`: `telex`, `vni`, `simple_telex_1`, `simple_telex_2`.
 - `options`: comma-separated, `-` for defaults. Accepted:
-  `spelling`, `no-spelling`, `modern-orthography`, `quick-telex`, `free-mark`,
-  `restore-if-wrong-spelling`, `allow-zfwj`, `quick-start-consonant`,
-  `quick-end-consonant`, `smart-switch-key`, `no-smart-switch-key`, `macro`,
-  `no-macro`, `macro-in-english`, `auto-caps-macro`, `upper-case-first`,
-  `temp-off-spelling`. Unknown flags are errors, not ignored — a typo must not
-  silently produce a default-configuration baseline.
+  `english`, `vietnamese`, `spelling`, `no-spelling`, `modern-orthography`,
+  `quick-telex`, `free-mark`, `restore-if-wrong-spelling`, `allow-zfwj`,
+  `quick-start-consonant`, `quick-end-consonant`, `smart-switch-key`,
+  `no-smart-switch-key`, `macro`, `no-macro`, `macro-in-english`,
+  `auto-caps-macro`, `upper-case-first`, `temp-off-spelling`. Unknown flags are
+  errors, not ignored — a typo must not silently produce a
+  default-configuration baseline.
 - `input`: typed characters, with `\b` backspace, `\n` enter, `\t` tab, `\s`
   space, `\\` backslash. Any other escape is an error.
 - `expected`: the final document, or `-` for an empty one (the same spelling the
@@ -123,6 +129,12 @@ id <TAB> method <TAB> options <TAB> input [<TAB> expected]
   Four fields mean "replay only"; the judge refuses that shape unless it is
   asked for with `--allow-missing-expected`, because one dropped tab removes
   the case from the gate and leaves the run green.
+- `macros`: the case's macro table, `name=content;name=content`, literal UTF-8
+  with no escape decoding (the first `=` splits a pair; a duplicate name
+  replaces the content, as `addMacro` does). `-` or an absent column is the empty
+  table; an empty cell, a pair without `=` and an empty name are errors. A
+  seventh column is an error too — a row that silently gains one is a case
+  whose table nobody parsed.
 
 The harness prints one line per key, then one summary line per case:
 

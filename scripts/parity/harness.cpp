@@ -385,7 +385,7 @@ bool applyControlKey(std::u32string& doc, uint32_t keyCode, std::string& err) {
 
 // One key. Returns false only on a model error, never on an engine disagreement.
 bool press(std::u32string& doc, const vKeyHookState* s, uint32_t keyCode, bool caps,
-           char32_t literal, std::string& emitted, std::string& err) {
+           char32_t literal, bool has_table, std::string& emitted, std::string& err) {
     const uint8_t code = s->code;
     const unsigned bpc = s->backspaceCount;
 
@@ -423,6 +423,17 @@ bool press(std::u32string& doc, const vKeyHookState* s, uint32_t keyCode, bool c
         // handleMacro(), OpenKey.mm:544-575. The typed key becomes the
         // expansion and the key that ended it is sent again, so the document
         // ends up holding content plus the break key.
+        //
+        // A table-less case is refused, as the base harness refused it: a fresh
+        // install has no macro table, so `findMacro` cannot hit and this result
+        // cannot occur. The test is on the case *declaring* a `macros` column,
+        // not on `macroData` being non-empty: `x=` declares one macro whose
+        // content is empty, and that case must still match.
+        if (!has_table) {
+            err = "vReplaceMaro requires a macro table; this case declares no `macros` "
+                  "column, so this result cannot occur";
+            return false;
+        }
         //
         // The autocomplete workaround at :546-549 (SendEmptyCharacter then
         // `backspaceCount++`) is deliberately not modelled: it emits U+202F /
@@ -658,7 +669,8 @@ int main(int argc, char** argv) {
             }
 
             std::string emitted;
-            if (!press(doc, state, keyCode, caps, typed, emitted, err)) return fail(c, err);
+            if (!press(doc, state, keyCode, caps, typed, !c.macros.empty(), emitted, err))
+                return fail(c, err);
 
             std::printf("%s\t%zu\t0x%02x\t%u\t%u\t%s\t%s\n", c.id.c_str(), i, keyCode,
                         static_cast<unsigned>(state->code),
