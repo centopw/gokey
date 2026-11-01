@@ -17,12 +17,17 @@ fn run(args: &[&str], stdin_bytes: &[u8]) -> Output {
         .stderr(Stdio::piped())
         .spawn()
         .expect("the openkey binary runs");
-    child
+    // `--input <file>` makes the child exit without reading stdin, so a
+    // broken pipe here is expected, not a test failure.
+    match child
         .stdin
         .take()
         .expect("stdin is piped")
         .write_all(stdin_bytes)
-        .expect("the test writes stdin");
+    {
+        Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {}
+        other => other.expect("the test writes stdin"),
+    }
     child.wait_with_output().expect("the binary exits normally")
 }
 
