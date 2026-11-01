@@ -1,2 +1,0 @@
-block: basic file:pending-simple.tsv
-active: basic

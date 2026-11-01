@@ -244,31 +244,33 @@ pub(crate) fn is_macro_break_code(code: u16) -> bool {
 
 /// `IS_SPECIALKEY` (`DataType.h:133-150`).
 ///
-/// VNI treats the ten digit keys as its transformation keys. Simple Telex 1/2
-/// are refused before this function is reached (C-004); their arm here reuses
-/// the Telex set, which upstream narrows by dropping the bracket keys
-/// (`DataType.h:141-145`).
+/// VNI treats the ten digit keys as its transformation keys. Telex includes
+/// the bracket keys. Simple Telex 1/2 drop them (`DataType.h:141-145`): there
+/// the brackets are commit-and-type keys, handled after the special-key branch
+/// (`Engine.cpp:1541`), not transformation keys.
 pub(crate) fn is_special_key(method: InputMethod, code: u16) -> bool {
     match method {
         InputMethod::Vni => is_number_key(code),
-        InputMethod::Telex | InputMethod::SimpleTelex1 | InputMethod::SimpleTelex2 => {
-            matches!(
-                code,
-                KEY_W
-                    | KEY_E
-                    | KEY_R
-                    | KEY_O
-                    | KEY_LEFT_BRACKET
-                    | KEY_RIGHT_BRACKET
-                    | KEY_A
-                    | KEY_S
-                    | KEY_D
-                    | KEY_F
-                    | KEY_J
-                    | KEY_Z
-                    | KEY_X
-            )
-        }
+        InputMethod::Telex => matches!(
+            code,
+            KEY_W
+                | KEY_E
+                | KEY_R
+                | KEY_O
+                | KEY_LEFT_BRACKET
+                | KEY_RIGHT_BRACKET
+                | KEY_A
+                | KEY_S
+                | KEY_D
+                | KEY_F
+                | KEY_J
+                | KEY_Z
+                | KEY_X
+        ),
+        InputMethod::SimpleTelex1 | InputMethod::SimpleTelex2 => matches!(
+            code,
+            KEY_W | KEY_E | KEY_R | KEY_O | KEY_A | KEY_S | KEY_D | KEY_F | KEY_J | KEY_Z | KEY_X
+        ),
     }
 }
 
@@ -1252,5 +1254,36 @@ mod tests {
             code_value(Charset::Cp1258, u32::from(KEY_D), 1),
             Some(0x00F0)
         );
+    }
+
+    #[test]
+    fn special_keys_match_upstream_per_method() {
+        // `DataType.h:133-150`: Telex includes the brackets. Simple Telex 1/2
+        // drop them — there the brackets commit and type the word instead
+        // (`Engine.cpp:1541`), so they must not enter the special-key branch.
+        for code in [
+            KEY_W, KEY_E, KEY_R, KEY_O, KEY_A, KEY_S, KEY_D, KEY_F, KEY_J, KEY_Z, KEY_X,
+        ] {
+            assert!(is_special_key(InputMethod::Telex, code), "telex {code}");
+            assert!(
+                is_special_key(InputMethod::SimpleTelex1, code),
+                "st1 {code}"
+            );
+            assert!(
+                is_special_key(InputMethod::SimpleTelex2, code),
+                "st2 {code}"
+            );
+        }
+        for code in [KEY_LEFT_BRACKET, KEY_RIGHT_BRACKET] {
+            assert!(is_special_key(InputMethod::Telex, code), "telex {code}");
+            assert!(
+                !is_special_key(InputMethod::SimpleTelex1, code),
+                "st1 {code}"
+            );
+            assert!(
+                !is_special_key(InputMethod::SimpleTelex2, code),
+                "st2 {code}"
+            );
+        }
     }
 }
