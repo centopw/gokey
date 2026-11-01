@@ -49,3 +49,7 @@ active: edit
 # two `case-vni-*` rows in case-mixed.tsv, and the smoke `vni-vieejt`) are judged
 # from here on. `telex`, `edit` and the two later blocks are untouched.
 active: vni
+
+# C-004 activates `simple`: the Simple Telex 1/2 files and the smoke
+# `simple-telex-1` are judged from here on. `opt` stays skipped by name.
+active: simple

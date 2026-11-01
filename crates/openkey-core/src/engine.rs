@@ -36,9 +36,10 @@
 //! - A forward delete (`Key::Delete`) has no macOS constant at the pin and is
 //!   not in `_breakCode`; it is modelled as a word break instead of guessed.
 //!
-//! Telex (C-002) and VNI (C-003) are ported; Simple Telex 1/2 (C-004) panic
-//! with `not yet implemented`, which the parity replay reports as
-//! `engine-pending` rather than as a disagreement.
+//! Telex (C-002), VNI (C-003) and Simple Telex 1/2 (C-004) are ported. A
+//! declared `todo!()` would be reported by the replay as `engine-pending`, and
+//! any other panic as `engine-panic`, so "not written yet" and "wrong" never
+//! share an exit code; no method reaches that path today.
 
 use crate::charset;
 use crate::event::{Action, Edit, Encoded, Ext, KeyEvent, Outcome, Phase};
@@ -209,12 +210,6 @@ impl Engine {
     /// engine for `keyUp` (`OpenKey.mm:711-714`), so an [`Phase::Up`] event is
     /// passed through untouched here too.
     pub fn apply(&mut self, event: &KeyEvent) -> Outcome {
-        match self.options.input_method {
-            InputMethod::Telex | InputMethod::Vni => {}
-            InputMethod::SimpleTelex1 | InputMethod::SimpleTelex2 => {
-                todo!("Simple Telex 1/2 (C-004) — only Telex (C-002) and VNI (C-003) are ported")
-            }
-        }
         if event.phase != Phase::Down {
             return Outcome {
                 action: Action::Pass,
@@ -1451,7 +1446,9 @@ impl Engine {
             }
         }
         if !self.is_changed {
-            if data == KEY_W {
+            // `Engine.cpp:1187`: an unconsumed `w` becomes `ư` for every
+            // method except Simple Telex 1, which types the letter literally.
+            if data == KEY_W && method != InputMethod::SimpleTelex1 {
                 self.check_for_standalone_char(data, KEY_U);
             } else {
                 self.insert_key(data, self.is_caps, true);
@@ -1666,6 +1663,20 @@ mod tests {
         })
     }
 
+    fn simple_telex_1_engine() -> Engine {
+        Engine::new(Options {
+            input_method: InputMethod::SimpleTelex1,
+            ..Options::default()
+        })
+    }
+
+    fn simple_telex_2_engine() -> Engine {
+        Engine::new(Options {
+            input_method: InputMethod::SimpleTelex2,
+            ..Options::default()
+        })
+    }
+
     fn key(ch: char) -> KeyEvent {
         let (key, shift) = match ch {
             'a'..='z' => (
@@ -1711,6 +1722,8 @@ mod tests {
             '0'..='9' => (Key::Digit(ch as u8 - b'0'), false),
             ' ' => (Key::Space, false),
             '.' => (Key::Dot, false),
+            '[' => (Key::LeftBracket, false),
+            ']' => (Key::RightBracket, false),
             '\t' => (Key::Tab, false),
             '\n' => (Key::Enter, false),
             '\u{8}' => (Key::Backspace, false),
@@ -1809,6 +1822,54 @@ mod tests {
         assert_eq!(type_all(&mut vni_engine(), "at3"), "at3");
         assert_eq!(type_all(&mut vni_engine(), "ac1"), "ác");
         assert_eq!(type_all(&mut vni_engine(), "at5"), "ạt");
+    }
+
+    #[test]
+    fn simple_telex_1_doubles_letters_and_places_the_tone() {
+        assert_eq!(type_all(&mut simple_telex_1_engine(), "aa"), "â");
+        assert_eq!(type_all(&mut simple_telex_1_engine(), "ee"), "ê");
+        assert_eq!(type_all(&mut simple_telex_1_engine(), "oo"), "ô");
+        assert_eq!(type_all(&mut simple_telex_1_engine(), "dd"), "đ");
+        assert_eq!(type_all(&mut simple_telex_1_engine(), "vieejt"), "việt");
+        assert_eq!(type_all(&mut simple_telex_1_engine(), "tieengs"), "tiếng");
+        // Simple Telex 1 places the tone inside `uo` differently from Telex:
+        // `nguoif` is `nguòi`, not `người` (the corpus pins the same row).
+        assert_eq!(type_all(&mut simple_telex_1_engine(), "nguoif"), "nguòi");
+    }
+
+    #[test]
+    fn simple_telex_2_reads_w_as_the_horn() {
+        assert_eq!(type_all(&mut simple_telex_2_engine(), "w"), "ư");
+        assert_eq!(type_all(&mut simple_telex_2_engine(), "wa"), "ưa");
+        assert_eq!(type_all(&mut simple_telex_2_engine(), "wow"), "ươ");
+        assert_eq!(type_all(&mut simple_telex_2_engine(), "wows"), "ướ");
+        assert_eq!(type_all(&mut simple_telex_2_engine(), "wowcj"), "ược");
+        assert_eq!(type_all(&mut simple_telex_2_engine(), "twow"), "tươ");
+        assert_eq!(type_all(&mut simple_telex_2_engine(), "ww"), "w");
+    }
+
+    #[test]
+    fn an_unconsumed_w_is_literal_only_in_simple_telex_1() {
+        // `Engine.cpp:1187`: the standalone-`w` transformation is skipped for
+        // Simple Telex 1, so the letter is typed; Telex and Simple Telex 2
+        // produce `ư`.
+        assert_eq!(type_all(&mut simple_telex_1_engine(), "w"), "w");
+        assert_eq!(type_all(&mut engine(), "w"), "ư");
+        assert_eq!(type_all(&mut simple_telex_2_engine(), "w"), "ư");
+    }
+
+    #[test]
+    fn brackets_commit_the_word_instead_of_transforming_in_simple_telex() {
+        // The brackets are not special keys in Simple Telex 1/2
+        // (`DataType.h:141-145`), so the press commits the word and types the
+        // bracket (`Engine.cpp:1541`). In Telex the same press is a
+        // transformation. Expected documents measured from the pinned harness.
+        assert_eq!(type_all(&mut simple_telex_1_engine(), "as["), "á[");
+        assert_eq!(type_all(&mut simple_telex_1_engine(), "as]"), "á]");
+        assert_eq!(type_all(&mut simple_telex_2_engine(), "wow["), "ươ[");
+        assert_eq!(type_all(&mut simple_telex_2_engine(), "wow]"), "ươ]");
+        assert_eq!(type_all(&mut engine(), "as["), "aớ");
+        assert_eq!(type_all(&mut engine(), "as]"), "aứ");
     }
 
     #[test]

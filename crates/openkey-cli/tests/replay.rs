@@ -1,9 +1,13 @@
 //! CLI contract tests for `openkey replay` (K-005).
 //!
-//! The engine is a stub until C-002, so these tests assert the report's shape
-//! and the error paths, not a parity verdict. The status token for a case is
-//! allowed to change from `PENDING` to `PASS`/`FAIL` when C-002 lands; the
-//! per-case line and the summary must keep existing.
+//! All four input methods are implemented (C-002, C-003, C-004), so these
+//! tests assert the report's shape, the scope rules and the error paths. The
+//! status token for a case may change as more blocks activate; the per-case
+//! line and the summary must keep existing.
+//!
+//! Guardrail 1 — an in-scope case with no verdict is exit 2 — keeps its own
+//! unit coverage in `src/replay.rs` (`classify_panic`) now that no engine
+//! `todo!()` remains, and in `src/report.rs` for the exit-code mapping.
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -208,27 +212,6 @@ fn an_all_inactive_scope_skips_every_case_and_is_green() {
 }
 
 #[test]
-fn an_in_scope_pending_case_is_not_green() {
-    // Telex is implemented (C-002) and VNI is implemented (C-003), but Simple
-    // Telex 1/2 is not (C-004), so the telex row is judged and the Simple Telex
-    // row is pending. The run is still red: one in-scope case has no verdict,
-    // and a judged neighbour must not make the run look green.
-    let run = scoped(
-        &["replay", "--corpus", &corpus("pending-simple.tsv")],
-        "scope-pending.txt",
-    );
-    assert_eq!(run.code, 2, "{}", run.stdout);
-    assert_eq!(status_of(&run.stdout, "case-five"), Some("PASS"));
-    assert_eq!(status_of(&run.stdout, "case-six"), Some("PENDING"));
-    assert!(
-        run.stdout
-            .contains("scope: judged 1 / in-scope 2 / skipped 0"),
-        "{}",
-        run.stdout
-    );
-}
-
-#[test]
 fn only_active_blocks_are_judged() {
     // `scope-mixed.txt` activates `telex` only: its case is judged and passes,
     // while the VNI case is skipped by name rather than replayed.
@@ -356,7 +339,7 @@ fn played_scripts() -> (PathBuf, Vec<PathBuf>) {
 }
 
 #[test]
-fn the_declared_scope_classifies_every_case_and_activates_telex_edit_and_vni() {
+fn the_declared_scope_classifies_every_case_and_activates_telex_edit_vni_and_simple() {
     let (scope, scripts) = played_scripts();
     assert_eq!(scripts.len(), 19, "18 corpus files + smoke");
 
@@ -386,15 +369,15 @@ fn the_declared_scope_classifies_every_case_and_activates_telex_edit_and_vni() {
         run.stdout
     );
     assert!(
-        run.stdout.contains("active: telex, edit, vni"),
+        run.stdout.contains("active: telex, edit, vni, simple"),
         "{}",
         run.stdout
     );
 
     // Per file, the judged/skipped split must add up to that file's corpus: the
-    // 141 telex cases (132 corpus + 9 smoke), the 52 edit cases and the 55 VNI
-    // cases are in scope, and the other 66 are skipped by name. A verdict may
-    // be PASS or FAIL —
+    // 141 telex cases (132 corpus + 9 smoke), the 52 edit cases, the 55 VNI
+    // cases and the 27 simple cases are in scope, and the other 39 are skipped
+    // by name. A verdict may be PASS or FAIL —
     // parity completeness is not this test's subject — but an in-scope case left
     // unjudged is exit 2 and is a scope defect, not an engine result.
     let mut skipped = 0usize;
@@ -441,11 +424,11 @@ fn the_declared_scope_classifies_every_case_and_activates_telex_edit_and_vni() {
         skipped += counts[2];
     }
     assert_eq!(
-        in_scope, 248,
-        "the telex, edit and vni blocks are the active ones"
+        in_scope, 275,
+        "the telex, edit, vni and simple blocks are the active ones"
     );
     assert_eq!(
-        skipped, 66,
-        "everything outside the telex, edit and vni blocks is skipped"
+        skipped, 39,
+        "everything outside the telex, edit, vni and simple blocks is skipped"
     );
 }

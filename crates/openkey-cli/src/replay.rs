@@ -1,10 +1,10 @@
 //! Replay one corpus case through [`openkey_core::Engine`] (K-005).
 //!
-//! Telex (C-002) and VNI (C-003) are the input methods the engine implements;
-//! Simple Telex 1/2 still ends in `engine-pending`, not in a verdict. That is
-//! reported as its own status rather than as a disagreement: "the port has not
-//! been written yet" and "the port disagrees with the oracle" are different
-//! facts and must not collapse into the same exit code.
+//! Telex, VNI and Simple Telex 1/2 are all implemented (C-002, C-003, C-004).
+//! A declared `todo!()` would still be reported as `engine-pending`, not as a
+//! disagreement: "the port has not been written yet" and "the port disagrees
+//! with the oracle" are different facts and must not collapse into the same
+//! exit code.
 //!
 //! A panic aborts the rest of the case. After a panic the engine's buffer cannot
 //! be trusted, so continuing would report a document assembled from a broken
@@ -73,19 +73,32 @@ fn catch_apply(engine: &mut Engine, event: &KeyEvent) -> Result<Outcome, ReplayE
                 .unwrap_or_else(|poisoned| poisoned.into_inner())
                 .take()
                 .unwrap_or_else(|| "panicked without a message".to_string());
-            // `PanicInfo` renders as `panicked at <location>:\n<message>`, so the
-            // `todo!()` marker is on the message line, not the first line.
-            if detail.contains("not yet implemented") {
-                let message = detail
-                    .lines()
-                    .find(|line| line.contains("not yet implemented"))
-                    .unwrap_or("not yet implemented")
-                    .to_string();
-                Err(ReplayError::Pending(message))
-            } else {
-                Err(ReplayError::Panic(detail.trim().to_string()))
-            }
+            Err(classify_panic(&detail))
         }
+    }
+}
+
+/// Classify a caught panic from the engine.
+///
+/// A declared `todo!()` is [`ReplayError::Pending`] — "not written yet" — and
+/// anything else is [`ReplayError::Panic`], a bug. Kept as a pure function so
+/// the pending path stays covered after C-004 implemented the last `todo!()`:
+/// guardrail 1 (an in-scope case with no verdict is exit 2) depends on this
+/// mapping, and no synthetic corpus row should stand in for an unimplemented
+/// method.
+///
+/// `PanicInfo` renders as `panicked at <location>:\n<message>`, so the
+/// `todo!()` marker is on the message line, not the first line.
+fn classify_panic(detail: &str) -> ReplayError {
+    if detail.contains("not yet implemented") {
+        let message = detail
+            .lines()
+            .find(|line| line.contains("not yet implemented"))
+            .unwrap_or("not yet implemented")
+            .to_string();
+        ReplayError::Pending(message)
+    } else {
+        ReplayError::Panic(detail.trim().to_string())
     }
 }
 
@@ -446,6 +459,27 @@ mod tests {
         // Backspaces and text are one decision, so the refusal leaves the
         // document exactly as it was.
         assert_eq!(doc, "vi");
+    }
+
+    #[test]
+    fn a_todo_panic_is_pending_and_any_other_panic_is_a_failure() {
+        // C-004 implemented the last `todo!()`, so no corpus row can reach this
+        // path any more. The classification is exercised with a synthetic panic
+        // message instead: guardrail 1 — an in-scope case with no verdict is
+        // exit 2 — depends on a `todo!()` staying `Pending`, not becoming a
+        // failure or a pass.
+        match classify_panic(
+            "panicked at crates/openkey-core/src/engine.rs:1:9:\nnot yet implemented: synthetic",
+        ) {
+            ReplayError::Pending(message) => assert!(message.contains("not yet implemented")),
+            other => panic!("a todo!() must be pending, got {other:?}"),
+        }
+        match classify_panic(
+            "panicked at crates/openkey-core/src/engine.rs:1:9:\nindex out of bounds",
+        ) {
+            ReplayError::Panic(message) => assert!(message.contains("index out of bounds")),
+            other => panic!("a non-todo panic must be a failure, got {other:?}"),
+        }
     }
 
     #[test]
