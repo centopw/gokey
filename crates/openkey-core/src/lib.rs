@@ -16,6 +16,7 @@
 #![forbid(unsafe_code)]
 
 pub mod charset;
+pub mod convert;
 pub mod engine;
 pub mod event;
 // `macro` is a reserved keyword, so the module is named `macros` while its

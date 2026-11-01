@@ -62,6 +62,6 @@ modifyCaseUnicode	engine/Macro.cpp:132	case-fold a word entry for auto-caps macr
 hasMacro/getAllMacro/addMacro/deleteMacro/onTableCodeChange	engine/Macro.cpp:199-246	macro CRUD	openkey-core::macros::store::* (new)		S6
 saveToFile/readFromFile	engine/Macro.cpp:248-293	macro persistence	openkey-platform::macro_persist (new)	file format compatibility is open question Q5	S6
 initSmartSwitchKey/getSmartSwitchKeySaveData/getAppInputMethodStatus/setAppInputMethodStatus	engine/SmartSwitchKey.cpp:19-73	per-app language memory	openkey-platform::app_memory (new)	needs OS app identity → not core	S7
-convertUtil/findKeyCode/getUnicodeCompoundMarkIndex	engine/ConvertTool.cpp:28-180	standalone text converter	openkey-cli::convert (new)	off the typing path; not M0/M1	S8
+convertUtil/findKeyCode/getUnicodeCompoundMarkIndex	engine/ConvertTool.cpp:28-180	standalone text converter	openkey-core::convert (new) + openkey-cli convert	off the typing path; not M0/M1	S8
 utf8ToWideString/wideStringToUtf8	engine/Engine.cpp:127,131	UTF-8↔UTF-16 conversion	— (delete)	Rust String is UTF-8; keep only at legacy file edges	S1
 26 v* config globals	engine/Engine.h:44-188	user settings read across the engine	openkey-core::options::Options	split from runtime toggles (§3)	S1
