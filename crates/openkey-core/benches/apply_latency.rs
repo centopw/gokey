@@ -2,9 +2,12 @@
 //!
 //! Measures [`Engine::apply`] over a deterministic 100,000-keystroke stream
 //! derived from the parity corpus and prints one JSON object
-//! (`schema: openkey-bench/1`) with p50/p99/p999, throughput, the commit and
-//! the runner. `scripts/ci/bench-report.py` holds the gate
-//! (p99 <= 0.500 ms) and the 1.10x sentinel; this binary only measures.
+//! (`schema: openkey-bench/2`) with p50/p99/p999, throughput, the commit, the
+//! runner and the runner image. `runner` is record-only; `runner_image`
+//! (`ImageOS-ImageVersion`) is the sentinel's comparability key, because a
+//! hosted runner's name is unique per job and can never match a baseline.
+//! `scripts/ci/bench-report.py` holds the gate (p99 <= 0.500 ms) and the 1.10x
+//! sentinel; this binary only measures.
 //!
 //! Why a custom harness instead of criterion: criterion's stock output carries
 //! no quantiles (`estimates.json` has mean/median/slope/std-dev/MAD/R2 and the
@@ -45,7 +48,7 @@ use std::time::{Duration, Instant};
 
 use openkey_core::{Engine, InputMethod, Key, KeyEvent, Mods, Options, Phase};
 
-const SCHEMA: &str = "openkey-bench/1";
+const SCHEMA: &str = "openkey-bench/2";
 /// V-PERF's pass condition (plan §5.2; G1).
 const GATE_MS: f64 = 0.500;
 const DEFAULT_EVENTS: usize = 100_000;
@@ -632,6 +635,7 @@ fn render_json(stream: &Stream, args: &Args, report: &Report) -> String {
         "schema": SCHEMA,
         "commit": commit_id(),
         "runner": runner_name(),
+        "runner_image": runner_image(),
         "os": env::consts::OS,
         "arch": env::consts::ARCH,
         "stream_events": stream.steps.len(),
@@ -667,9 +671,19 @@ fn commit_id() -> String {
         .unwrap_or_else(|| "unknown".to_string())
 }
 
+/// Record-only: a hosted runner's name is unique per job.
 fn runner_name() -> String {
     env::var("RUNNER_NAME")
         .ok()
         .filter(|name| !name.is_empty())
         .unwrap_or_else(|| "unknown".to_string())
+}
+
+/// The sentinel's comparability key: the image is stable across runs of the
+/// same `runs-on` label, while the runner's name is not.
+fn runner_image() -> String {
+    match (env::var("ImageOS"), env::var("ImageVersion")) {
+        (Ok(os), Ok(version)) if !os.is_empty() && !version.is_empty() => format!("{os}-{version}"),
+        _ => runner_name(),
+    }
 }
