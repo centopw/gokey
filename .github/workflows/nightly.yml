@@ -69,14 +69,9 @@ jobs:
             echo "::warning::scripts/parity.sh absent (K-005); nightly parity/fuzz not yet running"
           fi
 
-      - name: Benchmark regression vs previous main
-        run: |
-          if cargo bench --workspace --no-run --locked >/dev/null 2>&1; then
-            cargo bench --workspace --locked
-          else
-            echo "::warning::no benches in the workspace yet (C-014); regression check skipped"
-          fi
-
+      # Per-keystroke latency is measured by .github/workflows/bench.yml (C-016):
+      # macos-15, the runner V-PERF names, with a zero-target guard. The step that
+      # used to sit here skipped itself green when no bench target existed.
       - name: Report failure as an issue
         if: failure()
         env:
