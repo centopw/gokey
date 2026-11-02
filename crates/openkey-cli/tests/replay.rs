@@ -358,13 +358,13 @@ fn the_declared_scope_classifies_every_case_and_activates_every_block() {
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert!(
         run.stdout
-            .contains("scope: 334 case(s) over 20 corpus file(s)"),
+            .contains("scope: 342 case(s) over 20 corpus file(s)"),
         "{}",
         run.stdout
     );
     assert!(
         run.stdout
-            .contains("scope blocks: edit 52, macro 20, opt 39, simple 27, telex 141, vni 55"),
+            .contains("scope blocks: edit 52, macro 20, opt 47, simple 27, telex 141, vni 55"),
         "{}",
         run.stdout
     );
@@ -377,7 +377,7 @@ fn the_declared_scope_classifies_every_case_and_activates_every_block() {
 
     // Per file, the judged/skipped split must add up to that file's corpus: the
     // 141 telex cases (132 corpus + 9 smoke), the 52 edit cases, the 55 VNI
-    // cases, the 27 simple cases, the 39 option cases and the 20 macro cases are
+    // cases, the 27 simple cases, the 47 option cases and the 20 macro cases are
     // all in scope, and nothing is skipped by name any more — `macro` is the
     // last block to activate. A verdict may be PASS or FAIL —
     // parity completeness is not this test's subject — but an in-scope case left
@@ -426,7 +426,7 @@ fn the_declared_scope_classifies_every_case_and_activates_every_block() {
         skipped += counts[2];
     }
     assert_eq!(
-        in_scope, 334,
+        in_scope, 342,
         "all six blocks are active, so every declared case is in scope"
     );
     assert_eq!(

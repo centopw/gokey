@@ -1,7 +1,7 @@
 # Two flags at once: interactions the single-flag rows cannot show.
 # id	method	options	input	expected
-# free-mark has an Options field since C-013; its corpus combos (hoà vs hòa)
-# belong to C-007's free_mark coverage rather than being pinned here.
+# free-mark has an Options field since C-013; C-007 pins its single-flag rows
+# in options.tsv and its modern-orthography combo here.
 combo-modern-spell	telex	modern-orthography,spelling	hoaf	hoà
 combo-quick-modern	telex	quick-telex,modern-orthography	cc	ch
 combo-quick-nospell	telex	quick-telex,no-spelling	vieejt	việt
@@ -15,3 +15,4 @@ combo-restore-modern	telex	restore-if-wrong-spelling,modern-orthography	hoaf	ho�
 # combo-upper-quick: upper-case-first does not reach the expansion quick-telex produces
 combo-upper-quick	telex	upper-case-first,quick-telex	.\scc	. ch
 combo-modern-nospell	telex	modern-orthography,no-spelling	thuys	thuý
+combo-free-mark-modern	telex	free-mark,modern-orthography	hoaf	hoà

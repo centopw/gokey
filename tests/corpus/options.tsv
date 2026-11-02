@@ -37,3 +37,10 @@ opt-upper-dot	telex	upper-case-first	.\svieejt	.\sViệt
 opt-upper-enter	telex	upper-case-first	\nvieejt	\nViệt
 opt-upper-off	telex	-	.\svieejt	.\sviệt
 opt-no-spelling	telex	no-spelling	vieejt	việt
+opt-free-mark-hoa	telex	free-mark	hoaf	hòa
+opt-grammar-closing	telex	-	hoafn	hoàn
+opt-free-mark-closing	telex	free-mark	hoafn	hòan
+opt-grammar-double-n	telex	-	hoafnn	hoànn
+opt-free-mark-double-n	telex	free-mark	hoafnn	hòann
+opt-free-mark-backspace	telex	free-mark	hoafnn\b	hoàn
+opt-free-mark-break-backspace	telex	free-mark	hoafn\s\b	hòan
