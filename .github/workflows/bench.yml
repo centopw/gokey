@@ -48,9 +48,6 @@ jobs:
     name: p99 per keystroke (macos-15)
     runs-on: macos-15
     timeout-minutes: 60
-    env:
-      # The measured tree's own sha, not GitHub's synthetic PR merge commit.
-      GITHUB_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -75,8 +72,19 @@ jobs:
       - name: Measure (100k keystrokes, 1 warmup + 5 passes)
         run: |
           set -euo pipefail
-          cargo bench --locked -p openkey-core --bench apply_latency -- --out "$GITHUB_WORKSPACE/bench.json"
+          # GitHub reserves GITHUB_*: an `env:` GITHUB_SHA is printed in the step
+          # log but not applied to the process, so the harness recorded the
+          # synthetic merge commit. Clearing it for the binary makes the harness
+          # fall back to `git rev-parse HEAD`, which is the PR head checked out
+          # above. The assertion below fails the job if that is ever untrue.
+          GITHUB_SHA= cargo bench --locked -p openkey-core --bench apply_latency -- --out "$GITHUB_WORKSPACE/bench.json"
           test -s "$GITHUB_WORKSPACE/bench.json" || { echo "::error::bench.json was not written"; exit 1; }
+          head_sha="${{ github.event.pull_request.head.sha || github.sha }}"
+          commit=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["commit"])' "$GITHUB_WORKSPACE/bench.json")
+          if [ "${commit}" != "${head_sha}" ]; then
+            echo "::error::bench.json records ${commit}, expected the checked-out head ${head_sha}; provenance is wrong"
+            exit 1
+          fi
 
       # Baseline precedence: the newest successful bench run on `main`; if main
       # has none yet (the bootstrap this PR exercises), the newest successful
@@ -125,7 +133,8 @@ jobs:
           set -euo pipefail
           title="bench: latency gate failing"
           body=$(printf 'Run: %s/%s/actions/runs/%s\nCommit: %s\n' \
-            "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" "$GITHUB_SHA")
+            "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" \
+            "${{ github.event.pull_request.head.sha || github.sha }}")
           existing=$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')
           if [ -n "$existing" ]; then
             gh issue comment "$existing" --body "$body"
