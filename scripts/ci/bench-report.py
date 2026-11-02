@@ -1,20 +1,26 @@
 #!/usr/bin/env python3
 """Gate one latency measurement against V-PERF's budget and the rolling baseline.
 
-The input is the harness's JSON (`openkey-bench/1`, C-016 contract §2.1). Three
-checks, in this order, because a number from a malformed run must not be
+The input is the harness's JSON (`openkey-bench/2`, C-016 contract rev. r2).
+Three checks, in this order, because a number from a malformed run must not be
 compared with anything:
 
-0. **Contract shape.** Schema, 100,000 events, five repetitions, five per-rep
-   p99 values. A run that skipped the workload is not a slow run, it is not a
-   measurement, and averaging it into the baseline would poison the sentinel.
+0. **Contract shape.** Schema 2, 100,000 events, five repetitions, five per-rep
+   p99 values, and a non-empty `runner_image`. A run that skipped the workload
+   is not a slow run, it is not a measurement, and averaging it into the
+   baseline would poison the sentinel.
 1. **Absolute gate.** `p99_ms <= --gate` (0.500 ms, G1). A breach is `::error::`
    and exit 1: this is the number 1.0 ships against.
-2. **Sentinel.** Same workload hash and same runner as the baseline compares
-   `p99 / baseline_p99`; above `--sentinel` (1.10x) is `::warning::` and the job
-   stays green — a nightly regression is triaged (plan §5.2), not a merge block.
-   A different hash or runner, or no baseline at all, is `::notice::`: the
-   values are not comparable, so this run becomes the baseline instead of being
+2. **Sentinel.** Comparable when `stream_fnv1a`, `os`, `arch` and `runner_image`
+   match. `runner` is record-only and is never compared: on GitHub-hosted
+   runners it is unique per job, so a stored baseline's runner can never equal
+   the next run's and the ratio would never be evaluated. A schema-1 baseline
+   (no `runner_image`) is still compared on `stream_fnv1a` + `os` + `arch`, with
+   a `::notice::` that the key is weaker, so the first run after the schema bump
+   produces a real ratio instead of discarding the baseline. Above `--sentinel`
+   (1.10x) is `::warning::` and the job stays green — a nightly regression is
+   triaged (plan §5.2), not a merge block. A different workload, platform or
+   image is `::notice::`: this run becomes the baseline instead of being
    measured against an unrelated one.
 
 The baseline is written whenever the gate passes, so the rolling value is the
@@ -33,7 +39,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-SCHEMA = "openkey-bench/1"
+SCHEMA = "openkey-bench/2"
+LEGACY_SCHEMA = "openkey-bench/1"
 STREAM_EVENTS = 100_000
 REPETITIONS = 5
 
@@ -58,8 +65,16 @@ def load_json(path: Path, label: str) -> dict[str, Any] | None:
     return value
 
 
+def is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def is_text(value: Any) -> bool:
+    return isinstance(value, str) and bool(value)
+
+
 def contract_errors(doc: dict[str, Any]) -> list[str]:
-    """Every reason this document is not an `openkey-bench/1` measurement."""
+    """Every reason this document is not an `openkey-bench/2` measurement."""
     errors: list[str] = []
     if doc.get("schema") != SCHEMA:
         errors.append(f"schema is {doc.get('schema')!r}, expected {SCHEMA!r}")
@@ -73,26 +88,27 @@ def contract_errors(doc: dict[str, Any]) -> list[str]:
             f"p99_per_rep_ms must be a list of length {REPETITIONS}, got {per_rep!r}"
         )
     for key in ("p50_ms", "p99_ms", "p999_ms", "max_ms", "keystrokes_per_s", "gate_ms"):
-        value = doc.get(key)
-        if not isinstance(value, (int, float)) or isinstance(value, bool):
-            errors.append(f"{key} is {value!r}, expected a number")
-    for key in ("stream_fnv1a", "runner", "commit"):
-        value = doc.get(key)
-        if not isinstance(value, str) or not value:
-            errors.append(f"{key} is {value!r}, expected a non-empty string")
+        if not is_number(doc.get(key)):
+            errors.append(f"{key} is {doc.get(key)!r}, expected a number")
+    for key in ("commit", "runner", "runner_image", "stream_fnv1a", "os", "arch"):
+        if not is_text(doc.get(key)):
+            errors.append(f"{key} is {doc.get(key)!r}, expected a non-empty string")
     p99 = doc.get("p99_ms")
-    if isinstance(p99, (int, float)) and p99 < 0:
+    if is_number(p99) and p99 < 0:
         errors.append(f"p99_ms is {p99!r}, expected a non-negative duration")
     return errors
 
 
 def usable_baseline(doc: dict[str, Any] | None) -> bool:
-    if doc is None or doc.get("schema") != SCHEMA:
+    """A baseline is usable if it carries a comparable key and a positive p99."""
+    if doc is None or doc.get("schema") not in (SCHEMA, LEGACY_SCHEMA):
         return False
-    if not isinstance(doc.get("stream_fnv1a"), str) or not isinstance(doc.get("runner"), str):
+    if not is_text(doc.get("stream_fnv1a")) or not is_text(doc.get("os")) or not is_text(doc.get("arch")):
+        return False
+    if doc.get("schema") == SCHEMA and not is_text(doc.get("runner_image")):
         return False
     p99 = doc.get("p99_ms")
-    return isinstance(p99, (int, float)) and not isinstance(p99, bool) and p99 > 0
+    return is_number(p99) and p99 > 0
 
 
 def write_baseline(source: Path, destination: Path) -> None:
@@ -107,13 +123,13 @@ def write_baseline(source: Path, destination: Path) -> None:
 
 
 def fmt(value: Any, digits: int = 3) -> str:
-    if isinstance(value, (int, float)) and not isinstance(value, bool):
+    if is_number(value):
         return f"{value:.{digits}f}"
     return str(value)
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Gate one openkey-bench/1 measurement.")
+    parser = argparse.ArgumentParser(description="Gate one openkey-bench/2 measurement.")
     parser.add_argument("--current", required=True, type=Path, help="this run's JSON")
     parser.add_argument("--baseline", type=Path, help="previous baseline JSON (may be absent)")
     parser.add_argument("--write-baseline", type=Path, help="where to store this run as the baseline")
@@ -127,7 +143,7 @@ def main(argv: list[str] | None = None) -> int:
 
     errors = contract_errors(current)
     if errors:
-        print(f"::error::{args.current} is not an openkey-bench/1 measurement", file=sys.stderr)
+        print(f"::error::{args.current} is not an openkey-bench/2 measurement", file=sys.stderr)
         for error in errors:
             print(f"  - {error}", file=sys.stderr)
         return 1
@@ -147,20 +163,30 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     if not baseline_ok:
-        print(
-            "::notice::no usable baseline (first run, or unreadable); this run seeds the baseline"
-        )
+        print("::notice::no usable baseline (first run or unreadable); this run seeds the baseline")
     elif (
         baseline["stream_fnv1a"] != current["stream_fnv1a"]
-        or baseline["runner"] != current["runner"]
+        or baseline["os"] != current["os"]
+        or baseline["arch"] != current["arch"]
     ):
         print(
-            "::notice::workload hash or runner changed "
-            f"({baseline['stream_fnv1a']} / {baseline['runner']} -> "
-            f"{current['stream_fnv1a']} / {current['runner']}); "
+            "::notice::workload or platform changed "
+            f"({baseline['stream_fnv1a']} {baseline['os']}/{baseline['arch']} -> "
+            f"{current['stream_fnv1a']} {current['os']}/{current['arch']}); "
+            "not comparable, this run replaces the baseline"
+        )
+    elif baseline["schema"] == SCHEMA and baseline["runner_image"] != current["runner_image"]:
+        print(
+            "::notice::runner image changed "
+            f"({baseline['runner_image']} -> {current['runner_image']}); "
             "not comparable, this run replaces the baseline"
         )
     else:
+        if baseline["schema"] == LEGACY_SCHEMA:
+            print(
+                "::notice::baseline is openkey-bench/1 (no runner_image); comparing on "
+                "stream_fnv1a + os + arch, a weaker key"
+            )
         ratio = p99 / baseline_p99  # type: ignore[operator]
         if ratio > args.sentinel:
             print(
@@ -183,6 +209,7 @@ def print_summary(doc: dict[str, Any], baseline_p99: float | None, ratio: float 
     rows = [
         ("commit", doc.get("commit", "unknown")),
         ("runner", doc.get("runner", "unknown")),
+        ("runner_image", doc.get("runner_image", "unknown")),
         ("events", doc.get("stream_events", "?")),
         ("p99", f"{fmt(doc.get('p99_ms'), 6)} ms"),
         ("p50", f"{fmt(doc.get('p50_ms'), 6)} ms"),
