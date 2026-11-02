@@ -9,3 +9,17 @@ repository.workspace = true
 
 [dependencies]
 serde.workspace = true
+
+# Benchmarks only (C-016). `serde_json` is a dev-dependency, so it stays out of
+# the normal closure that `check-core-purity.py`, `check-no-network.py` and the
+# SBOM inspect; the workspace already resolves it through `openkey-platform`.
+[dev-dependencies]
+serde_json.workspace = true
+
+# `harness = false`: the target is a plain binary that measures and prints one
+# JSON object. A declared bench target is also what makes `cargo bench
+# --no-run` compile something, so the nightly's zero-target false green dies.
+[[bench]]
+name = "apply_latency"
+path = "benches/apply_latency.rs"
+harness = false
