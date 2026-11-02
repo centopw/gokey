@@ -77,7 +77,7 @@ Files: `telex-basic`, `telex-tones`, `telex-words`, `telex-syllables`,
 `telex-clusters`, `telex-stops`, `telex-tone-cycle`, `vni-basic`, `vni-words`,
 `vni-tones`, `simple-telex`, `simple-telex-modes`, `editing`,
 `editing-sequences`, `options`, `options-combos`, `spelling-boundaries`,
-`macros`, `case-mixed` — 334 cases, every `expected` column produced by the
+`macros`, `case-mixed` — 342 cases, every `expected` column produced by the
 pinned reference harness (`scripts/parity/README.md`), never hand-written.
 
 Owned by: QA/parity engineer (R5). Reviewed by: linguistics reviewer (R11).
