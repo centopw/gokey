@@ -1,0 +1,143 @@
+name: bench
+
+# V-PERF: p99 per keystroke <= 0.500 ms on the corpus stream, measured on
+# macos-15 arm64 — the runner 1.0 ships for, not the shared Linux VM the old
+# nightly step used. That step skipped itself green when no bench target
+# existed (C-014); this one fails on zero targets, which is the actual fix.
+#
+# Evidence, not a gate on merges: plan §5.2 says a latency breach is triaged,
+# not a PR block, so this check is not a required check and no repository
+# setting is touched. `pull_request` exists because `workflow_dispatch` only
+# takes effect once the workflow is on the default branch, so the pre-merge
+# measurement has to come from the PR itself.
+#
+# The measurement's cwd is the package root (cargo runs a `harness = false`
+# bench from `crates/openkey-core`), so `--out` is absolute: a relative path
+# would land inside the crate while the next step reads the workspace root.
+
+on:
+  pull_request:
+    paths:
+      - "crates/openkey-core/benches/**"
+      - "crates/openkey-core/Cargo.toml"
+      - "Cargo.lock"
+      - "scripts/ci/bench-report.py"
+      - ".github/workflows/bench.yml"
+      - "tests/corpus/**"
+      - "scripts/parity/smoke.tsv"
+  schedule:
+    # 09:30 ICT, thirty minutes after nightly's 02:00 UTC slot.
+    - cron: "30 2 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: bench-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  actions: read # `gh run download` reads the previous baseline's artifact
+  issues: write # the failure report, same as nightly
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_VERSION: "1.99.0"
+
+jobs:
+  measure:
+    name: p99 per keystroke (macos-15)
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable channel
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
+
+      # The false green's fix: `cargo bench` exits 0 with zero targets, so the
+      # declared target is asserted before anything is measured.
+      - name: Zero-target guard
+        run: |
+          set -euo pipefail
+          count=$(cargo metadata --format-version 1 --no-deps --locked | python3 -c 'import json, sys; d = json.load(sys.stdin); print(sum(1 for p in d["packages"] for t in p["targets"] if "bench" in t["kind"]))')
+          echo "bench targets: ${count}"
+          if [ "${count}" -eq 0 ]; then
+            echo "::error::no [[bench]] target in the workspace; cargo bench would exit 0 having measured nothing (C-016)"
+            exit 1
+          fi
+
+      - name: Measure (100k keystrokes, 1 warmup + 5 passes)
+        run: |
+          set -euo pipefail
+          # GitHub reserves GITHUB_*: an `env:` GITHUB_SHA is printed in the step
+          # log but not applied to the process, so the harness recorded the
+          # synthetic merge commit. Clearing it for the binary makes the harness
+          # fall back to `git rev-parse HEAD`, which is the PR head checked out
+          # above. The assertion below fails the job if that is ever untrue.
+          GITHUB_SHA= cargo bench --locked -p openkey-core --bench apply_latency -- --out "$GITHUB_WORKSPACE/bench.json"
+          test -s "$GITHUB_WORKSPACE/bench.json" || { echo "::error::bench.json was not written"; exit 1; }
+          head_sha="${{ github.event.pull_request.head.sha || github.sha }}"
+          commit=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["commit"])' "$GITHUB_WORKSPACE/bench.json")
+          if [ "${commit}" != "${head_sha}" ]; then
+            echo "::error::bench.json records ${commit}, expected the checked-out head ${head_sha}; provenance is wrong"
+            exit 1
+          fi
+
+      # Baseline precedence: the newest successful bench run on `main`; if main
+      # has none yet (the bootstrap this PR exercises), the newest successful
+      # run on any branch. `|| true` keeps a missing artifact from failing the
+      # job — bench-report.py treats no baseline as "seed it".
+      - name: Fetch previous baseline
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p baseline
+          # A baseline lookup that fails is not a measurement failure; the gate
+          # below still runs, with a notice that this run seeds the baseline.
+          run_id=$(gh run list --workflow bench.yml --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty' || true)
+          if [ -z "${run_id}" ]; then
+            run_id=$(gh run list --workflow bench.yml --status success --limit 10 --json databaseId --jq '.[0].databaseId // empty' || true)
+          fi
+          if [ -z "${run_id}" ]; then
+            echo "::notice::no successful bench run yet; this run seeds the baseline"
+            exit 0
+          fi
+          gh run download "${run_id}" -n bench-baseline -D baseline || true
+          test -f baseline/bench.json && echo "baseline from run ${run_id}" || echo "::notice::run ${run_id} carried no bench-baseline artifact"
+
+      - name: Gate (absolute 0.500 ms, sentinel 1.10x)
+        run: |
+          set -euo pipefail
+          python3 scripts/ci/bench-report.py \
+            --current "$GITHUB_WORKSPACE/bench.json" \
+            --baseline baseline/bench.json \
+            --write-baseline baseline/bench.json
+
+      - name: Upload baseline
+        if: always() && hashFiles('baseline/bench.json') != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bench-baseline
+          path: baseline/bench.json
+          if-no-files-found: error
+
+      - name: Report failure as an issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          title="bench: latency gate failing"
+          body=$(printf 'Run: %s/%s/actions/runs/%s\nCommit: %s\n' \
+            "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" \
+            "${{ github.event.pull_request.head.sha || github.sha }}")
+          existing=$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
