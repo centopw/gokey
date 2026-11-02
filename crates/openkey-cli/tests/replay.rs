@@ -101,36 +101,25 @@ fn a_missing_corpus_path_is_an_error() {
 }
 
 #[test]
-fn a_row_without_expected_is_refused_by_default() {
+fn a_row_without_expected_is_invalid_and_the_flag_is_gone() {
     let run = invoke(&["replay", "--corpus", &corpus("no-expected.tsv")]);
     assert_eq!(run.code, 2);
     assert_eq!(status_of(&run.stdout, "case-three"), Some("INVALID"));
     assert!(run.stdout.contains("no expected column"), "{}", run.stdout);
-}
 
-#[test]
-fn a_row_without_expected_is_a_skip_only_when_asked() {
+    // There is no opt-out: the old flag is an unknown argument, not a skip.
     let run = invoke(&[
         "replay",
         "--corpus",
         &corpus("no-expected.tsv"),
         "--allow-missing-expected",
     ]);
-    // Replay-only rows are still replayed, so while the engine is a stub the
-    // case reports PENDING; once C-002 lands it reports SKIP. Neither may count
-    // as a pass.
-    let status = status_of(&run.stdout, "case-three");
-    assert!(
-        status == Some("SKIP") || status == Some("PENDING"),
-        "expected SKIP or PENDING, got {status:?}:\n{}",
-        run.stdout
-    );
-    assert!(
-        run.stdout.contains("0 pass"),
-        "an all-skipped run must not look like a pass:\n{}",
-        run.stdout
-    );
     assert_eq!(run.code, 2);
+    assert!(
+        run.stderr.contains("unknown replay argument"),
+        "{}",
+        run.stderr
+    );
 }
 
 #[test]
@@ -184,8 +173,8 @@ fn a_missing_reference_engine_stops_before_replaying() {
 //
 // These assert the split PA asked for: a run with nothing declared in scope is
 // green (`judged 0 / in-scope 0 / skipped N`), while an in-scope case left
-// unjudged — pending, invalid, or a skipped in-scope row — stays at exit 2.
-// Green means "nothing declared is unjudged", never parity.
+// unjudged — pending or invalid — stays at exit 2. Green means "nothing
+// declared is unjudged", never parity.
 
 fn scoped(args: &[&str], scope: &str) -> Run {
     let mut owned: Vec<String> = args.iter().map(|arg| arg.to_string()).collect();
@@ -231,29 +220,19 @@ fn only_active_blocks_are_judged() {
 }
 
 #[test]
-fn an_in_scope_skip_is_still_unjudged() {
+fn a_missing_expected_column_in_scope_is_not_green() {
     let run = scoped(
-        &[
-            "replay",
-            "--corpus",
-            &corpus("no-expected.tsv"),
-            "--allow-missing-expected",
-        ],
+        &["replay", "--corpus", &corpus("no-expected.tsv")],
         "scope-no-expected.txt",
     );
     assert_eq!(
         run.code, 2,
-        "an in-scope skip is not a verdict:\n{}",
+        "an unjudged in-scope row is not a verdict:\n{}",
         run.stdout
     );
-    // While the engine is a stub this row is PENDING; once C-002 lands it is the
-    // in-scope SKIP judge() produces. Either way it is unjudged, not green.
-    let status = status_of(&run.stdout, "case-three");
-    assert!(
-        status == Some("PENDING") || status == Some("SKIP"),
-        "expected PENDING or SKIP, got {status:?}:\n{}",
-        run.stdout
-    );
+    // The row is INVALID (a corpus defect), not a skip: guardrail 1 says an
+    // unjudged in-scope case is never green, and the counts line names it.
+    assert_eq!(status_of(&run.stdout, "case-three"), Some("INVALID"));
     assert!(
         run.stdout
             .contains("scope: judged 0 / in-scope 1 / skipped 0"),
@@ -358,13 +337,13 @@ fn the_declared_scope_classifies_every_case_and_activates_every_block() {
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert!(
         run.stdout
-            .contains("scope: 342 case(s) over 20 corpus file(s)"),
+            .contains("scope: 2000 case(s) over 20 corpus file(s)"),
         "{}",
         run.stdout
     );
     assert!(
         run.stdout
-            .contains("scope blocks: edit 52, macro 20, opt 47, simple 27, telex 141, vni 55"),
+            .contains("scope blocks: edit 280, macro 133, opt 274, simple 169, telex 806, vni 338"),
         "{}",
         run.stdout
     );
@@ -376,12 +355,13 @@ fn the_declared_scope_classifies_every_case_and_activates_every_block() {
     );
 
     // Per file, the judged/skipped split must add up to that file's corpus: the
-    // 141 telex cases (132 corpus + 9 smoke), the 52 edit cases, the 55 VNI
-    // cases, the 27 simple cases, the 47 option cases and the 20 macro cases are
-    // all in scope, and nothing is skipped by name any more — `macro` is the
-    // last block to activate. A verdict may be PASS or FAIL —
-    // parity completeness is not this test's subject — but an in-scope case left
-    // unjudged is exit 2 and is a scope defect, not an engine result.
+    // 806 telex cases (797 corpus + 9 smoke), the 280 edit cases, the 338 VNI
+    // cases (337 corpus + 1 smoke), the 169 simple cases (168 corpus + 1 smoke),
+    // the 274 option cases and the 133 macro cases are all in scope, and nothing
+    // is skipped by name any more — `macro` is the last block to activate. A
+    // verdict may be PASS or FAIL — parity completeness is not this test's
+    // subject — but an in-scope case left unjudged is exit 2 and is a scope
+    // defect, not an engine result.
     let mut skipped = 0usize;
     let mut in_scope = 0usize;
     for script in &scripts {
@@ -426,7 +406,7 @@ fn the_declared_scope_classifies_every_case_and_activates_every_block() {
         skipped += counts[2];
     }
     assert_eq!(
-        in_scope, 342,
+        in_scope, 2000,
         "all six blocks are active, so every declared case is in scope"
     );
     assert_eq!(

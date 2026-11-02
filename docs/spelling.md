@@ -147,5 +147,5 @@ flag itself (`sp-restore-asdf`, `-viet`, `-hi`, `-xyz`, harness baseline), the
 break branch (`sp-restore-break`, `asd.`), the space branch
 (`sp-restore-space`, `asd` + space), and the flag-off control
 (`sp-restore-off`, `asd` + space → `ád `). With all six blocks (`telex`,
-`edit`, `vni`, `simple`, `opt`, `macro`) active the parity run judges 342 cases;
+`edit`, `vni`, `simple`, `opt`, `macro`) active the parity run judges 2000 cases;
 every in-scope case must be judged.

@@ -24,8 +24,8 @@
 #   1 at least one judged case disagrees (either half)
 #   2 no verdict: could not start (pin, toolchain, checkout), could not judge
 #     (corpus, scope or reference error), or an in-scope case was not judged
-#     (pending, invalid, or a skipped in-scope row). Pending inside the declared
-#     scope is never folded into green; pending outside it is skipped and named.
+#     (pending or invalid). Pending inside the declared scope is never folded
+#     into green; pending outside it is skipped and named.
 #
 # Scope is `parity/scope.txt` (K-005 turn 3): every case resolves to exactly one
 # of the six blocks, `active:` decides which are judged. The judged/in-scope/
@@ -200,8 +200,8 @@ done
 
 judged=$(( judge_pass + judge_fail ))
 # Every row the CLI reported is either judged (pass/fail) or unjudged
-# (pending/invalid); skipped rows are out of scope by construction, because CI
-# never passes --allow-missing-expected (an in-scope skip would exit 2 below).
+# (pending/invalid); skipped rows are out of scope by construction, because the
+# judge has no missing-expected opt-out (an in-scope unjudged row exits 2 below).
 in_scope=$(( judge_pass + judge_fail + judge_pending + judge_invalid ))
 
 green=0

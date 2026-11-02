@@ -7,12 +7,12 @@
 //!
 //! Everything here uses only `openkey-core`'s public API, because this file is
 //! an external test crate. It adds no production line and no dependency: the
-//! generator is a std-only `SplitMix64`, seeded from a fixed list plus the 342
-//! parity sequences (`tests/corpus/*.tsv` = 331, `scripts/parity/smoke.tsv` =
+//! generator is a std-only `SplitMix64`, seeded from a fixed list plus the 2000
+//! parity sequences (`tests/corpus/*.tsv` = 1989, `scripts/parity/smoke.tsv` =
 //! 11). A failing case re-reports its seed, profile, step index and complete
 //! event sequence so it can be replayed without a shrinker.
 //!
-//! Corpus inputs are keystrokes, not precomposed Vietnamese letters: all 342
+//! Corpus inputs are keystrokes, not precomposed Vietnamese letters: all 2000
 //! input cells are ASCII. The typed-character mapping mirrors the CLI's
 //! `replay::key_event` table and is pinned by exact set here (the CLI crate has
 //! no `lib.rs`, so the table cannot be imported); anything unmapped is an
@@ -982,8 +982,8 @@ fn every_parity_sequence_never_panics_and_stays_bounded() {
     let cases = parse_corpus();
     assert_eq!(
         cases.len(),
-        342,
-        "331 corpus rows + 11 smoke rows; a drift must be investigated, not absorbed"
+        2000,
+        "1989 corpus rows + 11 smoke rows; a drift must be investigated, not absorbed"
     );
     for case in &cases {
         let options = corpus_options(case);

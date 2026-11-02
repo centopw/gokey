@@ -11,8 +11,7 @@
 //! - `FAIL` — document differs, with a machine-readable class and the first
 //!   differing code point.
 //! - `PENDING` — the engine is not implemented for this key yet (`todo!()`).
-//! - `SKIP` — the row has no expected column and `--allow-missing-expected` was
-//!   passed.
+//! - `SKIP` — the row's block is declared in the parity scope but not active.
 //! - `INVALID` — the row asks for something the replay cannot model.
 //!
 //! Exit status: 0 every case passed, 1 at least one case failed, 2 the run
@@ -67,10 +66,6 @@ impl Row {
             class: None,
             detail: Some(detail.into()),
         }
-    }
-
-    pub fn skip(id: impl Into<String>) -> Self {
-        Self::skipped(id, "no expected column (--allow-missing-expected)")
     }
 
     /// A skip with a named reason: the row's block is declared but not active.
@@ -336,7 +331,7 @@ mod tests {
             Row::pass("a"),
             Row::fail("b", "expected", first_difference("x", "y")),
             Row::pending("c", "not yet implemented"),
-            Row::skip("d"),
+            Row::skipped("d", "block telex is not active"),
             Row::invalid("e", "bad flag"),
         ];
         let summary = Summary::from_rows(&rows);

@@ -20,8 +20,8 @@ id <TAB> method <TAB> options <TAB> input [<TAB> expected [<TAB> macros]]
 - `expected`: final text in the document, Unicode NFC, no quoting, using the
   same escapes as `input` (`\b \n \t \s \\`) — decoded in one pass, so a real
   backslash followed by `n` is written `\\n`. `-` means the empty document. A
-  five-column row is required; the judge refuses a four-column one unless it
-  is asked for with `--allow-missing-expected`.
+  five-column row is required; a four-column one is a corpus defect and the
+  judge refuses it (there is no opt-out).
 - `macros` (optional sixth column): the case's macro table,
   `name=content;name=content`. It is **literal UTF-8 with no escape decoding**,
   the first `=` splits a pair, and the content may be empty. `-`, or leaving the
@@ -77,7 +77,31 @@ Files: `telex-basic`, `telex-tones`, `telex-words`, `telex-syllables`,
 `telex-clusters`, `telex-stops`, `telex-tone-cycle`, `vni-basic`, `vni-words`,
 `vni-tones`, `simple-telex`, `simple-telex-modes`, `editing`,
 `editing-sequences`, `options`, `options-combos`, `spelling-boundaries`,
-`macros`, `case-mixed` — 342 cases, every `expected` column produced by the
+`macros`, `case-mixed` — 2000 cases, every `expected` column produced by the
 pinned reference harness (`scripts/parity/README.md`), never hand-written.
+
+### Generated rows
+
+Most rows are generated, and they live between `# >>> generated: <seed>` and
+`# <<< generated` at the end of their file. Regenerate them with:
+
+```
+./scripts/corpus-gen.sh --seed <n> --target 2000
+```
+
+The script is deterministic and idempotent: the same seed writes byte-identical
+files, so a second run leaves `git diff` empty, and a different seed rewrites
+only the marked region (rows outside the markers are never touched). It takes
+the expected cell from one fresh harness process per case, refuses a row it
+cannot classify under `parity/scope.txt`, refuses duplicate ids, and refuses to
+commit a per-case value that the whole-file harness run disagrees with. It is
+evidence tooling, not a gate: CI judges the committed rows, never the seed.
+
+Ids are unique within a file. Four ids also appear in `scripts/parity/smoke.tsv`
+as well as in the corpus — `telex-aa`, `telex-aw`, `telex-dd` (both in
+`telex-basic.tsv`) and `telex-vieejt` (`telex-words.tsv`) — and stay that way:
+the smoke file is a separate script with its own rows, renaming them would churn
+rows unrelated to their tasks, and per-file uniqueness is what the loader
+enforces.
 
 Owned by: QA/parity engineer (R5). Reviewed by: linguistics reviewer (R11).

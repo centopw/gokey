@@ -127,9 +127,9 @@ id <TAB> method <TAB> options <TAB> input [<TAB> expected [<TAB> macros]]
   harness uses for empty output). It uses the same escape table as `input`
   (`\b \n \t \r \s \\`), decoded in a single pass, so a document that really
   holds a backslash followed by `n` is written `\\n` and is not a newline.
-  Four fields mean "replay only"; the judge refuses that shape unless it is
-  asked for with `--allow-missing-expected`, because one dropped tab removes
-  the case from the gate and leaves the run green.
+  Four fields mean "replay only", which no longer exists: the judge refuses a
+  four-column row unconditionally, because one dropped tab would otherwise
+  remove the case from the gate and leave the run green.
 - `macros`: the case's macro table, `name=content;name=content`, literal UTF-8
   with no escape decoding (the first `=` splits a pair; a duplicate name
   replaces the content, as `addMacro` does). `-` or an absent column is the empty
@@ -177,8 +177,8 @@ cargo run -q --locked -p openkey-cli -- replay \
 ref-engine` the reference harness is a second, independent judge: a case whose
 expected column agrees but whose Rust output differs from the oracle fails with
 class `reference-engine`, and the detail names the first differing code point.
-The gate does not pass `--allow-missing-expected`, so a row that lost its fifth
-field is `INVALID` (a corpus defect, visible), not a silent skip.
+The gate never skips a row: a row that lost its fifth field is `INVALID` (a
+corpus defect, visible), not a silent skip, and there is no opt-out for it.
 
 Exit status, and why pending is separate from pass:
 
@@ -186,8 +186,8 @@ Exit status, and why pending is separate from pass:
   whose every case is in an inactive block is also `0`: nothing declared is
   unjudged. That is not parity, and the counts line says so.
 - `1` — at least one judged case fails (expected column or reference engine).
-- `2` — no verdict: an in-scope case was left unjudged (pending, invalid, or a
-  skipped in-scope row), or the build, corpus, scope or reference engine could
+- `2` — no verdict: an in-scope case was left unjudged (pending or invalid), or
+  the build, corpus, scope or reference engine could
   not run. `parity.sh` prints the state by name
   (`::error::parity judge: no verdict — …`) instead of folding it into green.
 

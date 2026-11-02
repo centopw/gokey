@@ -152,13 +152,6 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("script", type=Path)
     ap.add_argument("results", type=Path)
-    ap.add_argument(
-        "--allow-missing-expected",
-        action="store_true",
-        help="treat a case without an expected column as a skip instead of an error; "
-        "CI never passes this, because a one-column editing slip would otherwise "
-        "remove a case from the gate and stay green",
-    )
     args = ap.parse_args()
 
     try:
@@ -181,19 +174,14 @@ def main() -> int:
         return 2
 
     unblessed = [(case_id, lineno) for case_id, _, expected, lineno in cases if expected is None]
-    if unblessed and not args.allow_missing_expected:
+    if unblessed:
         listed = ", ".join(f"{case_id} (line {lineno})" for case_id, lineno in unblessed[:5])
         print(f"::error::{args.script.name}: {len(unblessed)} case(s) have no expected column: "
-              f"{listed}. Write the fifth field, or pass --allow-missing-expected to skip them "
-              "deliberately", file=sys.stderr)
+              f"{listed}. Write the fifth field; there is no opt-out.", file=sys.stderr)
         return 2
 
-    failed = checked = skipped = 0
+    failed = checked = 0
     for case_id, typed, expected, _lineno in cases:
-        if expected is None:
-            skipped += 1
-            print(f"SKIP {case_id}: no expected column (--allow-missing-expected)")
-            continue
         checked += 1
         actual = finals[case_id]
         if actual == expected:
@@ -213,12 +201,11 @@ def main() -> int:
 
     if checked == 0:
         print(f"::error::{args.script.name}: nothing was compared — 0 of {len(cases)} case(s) "
-              "carry an expected column, and an empty or all-skipped script is not a pass",
+              "carry an expected column, and an empty script is not a pass",
               file=sys.stderr)
         return 2
 
-    print(f"{checked - failed}/{checked} cases agree"
-          + (f", {skipped} skipped" if skipped else ""))
+    print(f"{checked - failed}/{checked} cases agree")
     return 1 if failed else 0
 
 

@@ -38,7 +38,6 @@ openkey — headless harness for the GoKey port
 USAGE:
     openkey --version
     openkey replay --corpus <path> [--scope <path>] [--diff ref-engine] [--ref <path>]
-                   [--allow-missing-expected]
     openkey scope --scope <path> --corpus <path> [--corpus <path>...]
     openkey convert --from <charset> --to <charset> [--all-caps | --all-non-caps]
                     [--caps-first-letter | --caps-each-word] [--remove-mark]
@@ -46,6 +45,8 @@ USAGE:
 
 OPTIONS:
     --corpus <path>             A .tsv file or a directory searched recursively.
+                                Every row needs a fifth (expected) column; a row
+                                without one is INVALID and keeps the run at exit 2.
     --scope <path>              Declared parity scope (parity/scope.txt). On
                                 `replay` every case must resolve to exactly one
                                 block; a case in an inactive block is SKIP, and an
@@ -57,9 +58,6 @@ OPTIONS:
                                 harness as well as with the corpus expected column.
     --ref <path>                Reference harness binary. Defaults to
                                 $OPENKEY_REF_ENGINE, then .oracle/build/harness.
-    --allow-missing-expected    Treat a row without a fifth column as a deliberate
-                                skip. CI never passes this: a dropped tab would
-                                otherwise remove a case from the gate silently.
 
 CONVERT:
     Transcode text between `unicode`, `tcvn3`, `vni`, `unicode-compound` and
@@ -127,7 +125,6 @@ fn replay_command(args: Vec<String>) -> Result<u8, String> {
     let mut scope_path: Option<PathBuf> = None;
     let mut diff_ref = false;
     let mut ref_path: Option<PathBuf> = None;
-    let mut allow_missing = false;
 
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
@@ -161,7 +158,6 @@ fn replay_command(args: Vec<String>) -> Result<u8, String> {
                     .ok_or_else(|| "--ref needs a path".to_string())?;
                 ref_path = Some(PathBuf::from(value));
             }
-            "--allow-missing-expected" => allow_missing = true,
             "--help" | "-h" => {
                 println!("{USAGE}");
                 return Ok(0);
@@ -226,13 +222,13 @@ fn replay_command(args: Vec<String>) -> Result<u8, String> {
 
         // A missing expected column is a corpus defect, not an engine result.
         // Checking it before replaying keeps a dropped tab visible even while
-        // every case is engine-pending.
-        if case.expected.is_none() && !allow_missing {
+        // every case is engine-pending. There is no opt-out: a row without a
+        // fifth column is unjudged, so the run cannot be green.
+        if case.expected.is_none() {
             rows.push(Row::invalid(
                 case.id.clone(),
                 format!(
-                    "{}:{}: no expected column; write the fifth field or pass \
-                     --allow-missing-expected",
+                    "{}:{}: no expected column; write the fifth field",
                     case.source.display(),
                     case.line
                 ),
@@ -246,7 +242,7 @@ fn replay_command(args: Vec<String>) -> Result<u8, String> {
             .map(String::as_str);
 
         let row = match replay::run(case) {
-            Ok(actual) => judge(case, &actual, reference_document, allow_missing),
+            Ok(actual) => judge(case, &actual, reference_document),
             Err(err) => match err {
                 replay::ReplayError::Invalid(message) => Row::invalid(
                     case.id.clone(),
@@ -262,9 +258,7 @@ fn replay_command(args: Vec<String>) -> Result<u8, String> {
         };
         // Only a case that produced a document was compared; pending, invalid
         // and skipped rows never reach the reference engine's verdict.
-        if reference_document.is_some()
-            && matches!(row.status, report::Status::Pass | report::Status::Fail)
-        {
+        if counts_reference_check(reference_document, row.status) {
             ref_checked += 1;
         }
         rows.push(row);
@@ -276,9 +270,9 @@ fn replay_command(args: Vec<String>) -> Result<u8, String> {
         // `judged` counts this run's verdicts; every pass/fail belongs to an
         // active block, because inactive cases were skipped above.
         judged: summary.pass + summary.fail,
-        // `in_scope` is the corpus minus what the scope skipped. An in-scope
-        // skip (only reachable via --allow-missing-expected) stays unjudged and
-        // therefore keeps the run non-green.
+        // `in_scope` is the corpus minus what the scope skipped (inactive
+        // blocks). An in-scope row that is left unjudged — pending or invalid —
+        // stays inside this count and therefore keeps the run non-green.
         in_scope: cases.len() - scope_skipped,
         skipped: scope_skipped,
     });
@@ -461,34 +455,26 @@ fn charset_name(charset: Charset) -> &'static str {
     }
 }
 
-fn judge(case: &corpus::Case, actual: &str, reference: Option<&str>, allow_missing: bool) -> Row {
+/// Whether a row's document was compared against the reference engine.
+///
+/// The counting rule is a pinned seam (§9 row 35): a row counts only when the
+/// reference harness produced a document for it *and* the port produced a
+/// verdict (`Pass`/`Fail`). Pending, invalid and skipped rows are unjudged, so
+/// a reference document they never reached is not a comparison.
+fn counts_reference_check(reference: Option<&str>, status: report::Status) -> bool {
+    reference.is_some() && matches!(status, report::Status::Pass | report::Status::Fail)
+}
+
+fn judge(case: &corpus::Case, actual: &str, reference: Option<&str>) -> Row {
     let Some(expected) = case.expected.as_deref() else {
-        if !allow_missing {
-            return Row::invalid(
-                case.id.clone(),
-                format!(
-                    "{}:{}: no expected column; write the fifth field or pass \
-                     --allow-missing-expected",
-                    case.source.display(),
-                    case.line
-                ),
-            );
-        }
-        if let Some(reference) = reference {
-            if reference != actual {
-                return Row::fail(
-                    case.id.clone(),
-                    "reference-engine",
-                    format!(
-                        "reference {} vs port {}; {}",
-                        escape(reference),
-                        escape(actual),
-                        first_difference(reference, actual)
-                    ),
-                );
-            }
-        }
-        return Row::skip(case.id.clone());
+        return Row::invalid(
+            case.id.clone(),
+            format!(
+                "{}:{}: no expected column; write the fifth field",
+                case.source.display(),
+                case.line
+            ),
+        );
     };
 
     if actual != expected {
@@ -546,13 +532,13 @@ mod tests {
 
     #[test]
     fn a_matching_expected_column_passes() {
-        let row = judge(&case(Some("việt")), "việt", None, false);
+        let row = judge(&case(Some("việt")), "việt", None);
         assert_eq!(row.status, Status::Pass);
     }
 
     #[test]
     fn a_mismatch_names_the_class_and_the_reference_verdict() {
-        let row = judge(&case(Some("việt")), "viet", Some("viet"), false);
+        let row = judge(&case(Some("việt")), "viet", Some("viet"));
         assert_eq!(row.status, Status::Fail);
         assert_eq!(row.class, Some("expected"));
         let detail = row.detail.unwrap();
@@ -565,25 +551,37 @@ mod tests {
 
     #[test]
     fn a_reference_mismatch_fails_even_when_expected_matches() {
-        let row = judge(&case(Some("việt")), "việt", Some("viêt"), false);
+        let row = judge(&case(Some("việt")), "việt", Some("viêt"));
         assert_eq!(row.status, Status::Fail);
         assert_eq!(row.class, Some("reference-engine"));
     }
 
     #[test]
-    fn a_missing_expected_column_is_invalid_by_default() {
-        let row = judge(&case(None), "việt", None, false);
+    fn a_missing_expected_column_is_invalid() {
+        let row = judge(&case(None), "việt", None);
         assert_eq!(row.status, Status::Invalid);
         assert!(row.detail.unwrap().contains("no expected column"));
     }
 
     #[test]
-    fn a_missing_expected_column_is_a_skip_or_a_reference_failure() {
-        let row = judge(&case(None), "việt", Some("việt"), true);
-        assert_eq!(row.status, Status::Skip);
+    fn a_missing_expected_column_is_invalid_even_with_a_reference_document() {
+        // A reference verdict cannot make an unjudged row judged: there is no
+        // opt-out, so the same row is INVALID whether or not the oracle spoke.
+        let row = judge(&case(None), "việt", Some("việt"));
+        assert_eq!(row.status, Status::Invalid);
+        assert!(row.detail.unwrap().contains("no expected column"));
+    }
 
-        let row = judge(&case(None), "viet", Some("việt"), true);
-        assert_eq!(row.status, Status::Fail);
-        assert_eq!(row.class, Some("reference-engine"));
+    #[test]
+    fn the_counting_rule_counts_only_judged_rows_with_a_reference() {
+        // §9 row 35: `ref_checked` counts a comparison, so it needs both a
+        // reference document and a verdict that could have compared it.
+        assert!(counts_reference_check(Some("việt"), Status::Pass));
+        assert!(counts_reference_check(Some("việt"), Status::Fail));
+        assert!(!counts_reference_check(Some("việt"), Status::Pending));
+        assert!(!counts_reference_check(Some("việt"), Status::Skip));
+        assert!(!counts_reference_check(Some("việt"), Status::Invalid));
+        assert!(!counts_reference_check(None, Status::Pass));
+        assert!(!counts_reference_check(None, Status::Fail));
     }
 }

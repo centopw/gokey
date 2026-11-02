@@ -103,12 +103,15 @@ class NothingCompared(Judge):
         self.assertEqual(code, 2)
         self.assertIn("nothing was compared", err)
 
-    def test_all_skipped_exits_two_even_with_the_flag(self) -> None:
+    def test_a_script_with_no_expected_columns_exits_two(self) -> None:
+        # Every row lost its fifth field: that is a corpus defect named row by
+        # row, not a run with "nothing to do".
         self.write_script("a\ttelex\t-\taa", "b\ttelex\t-\tb")
         self.write_results(("a", "â"), ("b", "b"))
-        code, _, err = self.run_judge("--allow-missing-expected")
+        code, out, err = self.run_judge()
         self.assertEqual(code, 2)
-        self.assertIn("nothing was compared", err)
+        self.assertEqual(out, "")
+        self.assertIn("2 case(s) have no expected column: a (line 1), b (line 2)", err)
 
 
 class MissingExpectedColumn(Judge):
@@ -121,15 +124,17 @@ class MissingExpectedColumn(Judge):
         self.assertEqual(code, 2)
         self.assertEqual(out, "")
         self.assertIn("b (line 2)", err)
-        self.assertIn("--allow-missing-expected", err)
+        self.assertIn("Write the fifth field; there is no opt-out", err)
 
-    def test_the_flag_makes_the_skip_explicit_and_visible(self) -> None:
-        self.write_script("a\ttelex\t-\taa\tâ", "b\ttelex\t-\tbb")
-        self.write_results(("a", "â"), ("b", "b"))
-        code, out, err = self.run_judge("--allow-missing-expected")
-        self.assertEqual((code, err), (0, ""))
-        self.assertIn("SKIP b", out)
-        self.assertIn("1/1 cases agree, 1 skipped", out)
+    def test_the_removed_flag_is_rejected_as_an_unknown_argument(self) -> None:
+        # R4: the opt-out is gone from both judges. argparse exits 2 on the
+        # unknown flag, so a stale invocation fails loudly instead of silently
+        # skipping rows.
+        self.write_script("a\ttelex\t-\taa\tâ")
+        self.write_results(("a", "â"))
+        with self.assertRaises(SystemExit) as caught:
+            self.run_judge("--allow-missing-expected")
+        self.assertEqual(caught.exception.code, 2)
 
 
 class Escapes(Judge):
