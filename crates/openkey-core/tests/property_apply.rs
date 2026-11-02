@@ -12,6 +12,12 @@
 //! 11). A failing case re-reports its seed, profile, step index and complete
 //! event sequence so it can be replayed without a shrinker.
 //!
+//! Corpus inputs are keystrokes, not precomposed Vietnamese letters: all 334
+//! input cells are ASCII. The typed-character mapping mirrors the CLI's
+//! `replay::key_event` table and is pinned by exact set here (the CLI crate has
+//! no `lib.rs`, so the table cannot be imported); anything unmapped is an
+//! error, never a guessed key.
+//!
 //! The corpus-derived cases are sequence *material* for this property, not a
 //! second parity judge: expected output stays `scripts/parity.sh`'s job, and
 //! the corpus files are read, never written.
@@ -201,7 +207,7 @@ fn set_all_booleans(options: &mut Options, value: bool) {
     options.temp_off_hotkey = value;
 }
 
-/// 20 method×charset pairs, all-true, all-false, and `enabled = false`.
+/// 20 method×charset pairs, all-true, the English-branch profile, and all-false.
 fn option_profiles() -> Vec<Options> {
     let mut profiles = Vec::new();
     for input_method in [
@@ -227,13 +233,18 @@ fn option_profiles() -> Vec<Options> {
     let mut all_true = Options::default();
     set_all_booleans(&mut all_true, true);
     profiles.push(all_true);
+    // The English-branch profile: `enabled = false` is the only way into
+    // `engine.rs:317-322`, and that branch needs both macro flags. It sits at
+    // an odd index so `case_macros` supplies a table; `use_macro` stays at the
+    // default `true` (`options.rs:98`).
+    profiles.push(Options {
+        enabled: false,
+        use_macro_in_english: true,
+        ..Options::default()
+    });
     let mut all_false = Options::default();
     set_all_booleans(&mut all_false, false);
     profiles.push(all_false);
-    profiles.push(Options {
-        enabled: false,
-        ..Options::default()
-    });
     profiles
 }
 
@@ -460,7 +471,6 @@ fn decode(raw: &str, where_: &str) -> String {
             Some('b') => out.push('\u{8}'),
             Some('n') => out.push('\n'),
             Some('t') => out.push('\t'),
-            Some('r') => out.push('\r'),
             Some('s') => out.push(' '),
             Some('\\') => out.push('\\'),
             other => panic!("{where_}: bad escape {other:?}"),
@@ -569,20 +579,7 @@ fn corpus_options(case: &CorpusCase) -> Options {
     options
 }
 
-fn base_letter(typed: char) -> Option<char> {
-    match typed {
-        'a' | 'ă' | 'â' | 'A' | 'Ă' | 'Â' => Some('a'),
-        'e' | 'ê' | 'E' | 'Ê' => Some('e'),
-        'i' | 'I' => Some('i'),
-        'o' | 'ô' | 'ơ' | 'O' | 'Ô' | 'Ơ' => Some('o'),
-        'u' | 'ư' | 'U' | 'Ư' => Some('u'),
-        'y' | 'Y' => Some('y'),
-        'd' | 'đ' | 'D' | 'Đ' => Some('d'),
-        other if other.is_ascii_alphabetic() => Some(other.to_ascii_lowercase()),
-        _ => None,
-    }
-}
-
+/// The letter key an ASCII letter lands on, looked up by its lowercase form.
 fn letter_key(base: char) -> Key {
     match base {
         'a' => Key::A,
@@ -611,23 +608,30 @@ fn letter_key(base: char) -> Key {
         'x' => Key::X,
         'y' => Key::Y,
         'z' => Key::Z,
-        other => unreachable!("not a base letter: {other:?}"),
+        other => unreachable!("not an ASCII letter: {other:?}"),
     }
 }
 
-/// The physical key an adapter would deliver for one typed character.
+/// Mirror `crates/openkey-cli/src/replay.rs:138-181` (`key_event`) exactly.
 ///
-/// ASCII follows the CLI's replay mapping; Vietnamese letters fold onto their
-/// base key (the layout key a user presses) with `text` carrying the accented
-/// character, which is the shape a real adapter produces. Anything else
-/// (CJK, emoji, NUL) is `Other(0)` with `text`, a legal non-Latin layout event.
-fn event_for(typed: char) -> KeyEvent {
+/// `crates/openkey-cli` has no `lib.rs`, so the table cannot be imported; the
+/// pools test pins this copy by exact set instead. The CLI refuses `\r` and
+/// every character outside its table, so this returns `None` for them and
+/// `corpus_steps` fails rather than guessing a key.
+fn cli_key_event(typed: char) -> Option<KeyEvent> {
     let (key, shift) = match typed {
         '\u{8}' => (Key::Backspace, false),
-        '\n' | '\r' => (Key::Enter, false),
+        '\n' => (Key::Enter, false),
         '\t' => (Key::Tab, false),
         ' ' => (Key::Space, false),
+        'a'..='z' | 'A'..='Z' => (
+            letter_key(typed.to_ascii_lowercase()),
+            typed.is_ascii_uppercase(),
+        ),
         '0'..='9' => (Key::Digit(typed as u8 - b'0'), false),
+        // `_characterMap` maps shifted digits to the same keycodes with
+        // `CAPS_MASK` (`Vietnamese.cpp:535-545`); the shift flag reproduces
+        // that mask through `capsStatus`.
         '!' => (Key::Digit(1), true),
         '@' => (Key::Digit(2), true),
         '#' => (Key::Digit(3), true),
@@ -649,12 +653,9 @@ fn event_for(typed: char) -> KeyEvent {
         '-' => (Key::Minus, false),
         '=' => (Key::Equals, false),
         '`' => (Key::Backquote, false),
-        other => match base_letter(other) {
-            Some(base) => (letter_key(base), other.is_uppercase()),
-            None => (Key::Other(0), other.is_uppercase()),
-        },
+        _ => return None,
     };
-    KeyEvent {
+    Some(KeyEvent {
         key,
         mods: Mods {
             shift,
@@ -662,13 +663,145 @@ fn event_for(typed: char) -> KeyEvent {
         },
         phase: Phase::Down,
         text: Some(typed),
+    })
+}
+
+/// Record one pinned entry of the CLI table.
+fn assert_one_mapping(mapped: &mut BTreeSet<char>, typed: char, key: Key, shift: bool) {
+    let event = cli_key_event(typed).unwrap_or_else(|| panic!("{typed:?} must map"));
+    assert_eq!(event.key, key, "{typed:?}");
+    assert_eq!(
+        event.mods,
+        Mods {
+            shift,
+            ..Mods::default()
+        },
+        "{typed:?}"
+    );
+    assert_eq!(event.phase, Phase::Down, "{typed:?}");
+    assert_eq!(event.text, Some(typed), "{typed:?}");
+    assert!(mapped.insert(typed), "{typed:?} listed twice");
+}
+
+/// The drift alarm for the copied CLI table: 87 characters with their exact
+/// key and shift, `text` always present, and the refusal set pinned.
+///
+/// Written from `replay.rs:139-171` independently of `cli_key_event`, so a
+/// change to either copy fails here instead of silently changing what a corpus
+/// row means.
+fn assert_cli_mapping_is_pinned() {
+    let mut mapped = BTreeSet::new();
+    assert_one_mapping(&mut mapped, '\u{8}', Key::Backspace, false);
+    assert_one_mapping(&mut mapped, '\n', Key::Enter, false);
+    assert_one_mapping(&mut mapped, '\t', Key::Tab, false);
+    assert_one_mapping(&mut mapped, ' ', Key::Space, false);
+    for (typed, key) in [
+        ('a', Key::A),
+        ('b', Key::B),
+        ('c', Key::C),
+        ('d', Key::D),
+        ('e', Key::E),
+        ('f', Key::F),
+        ('g', Key::G),
+        ('h', Key::H),
+        ('i', Key::I),
+        ('j', Key::J),
+        ('k', Key::K),
+        ('l', Key::L),
+        ('m', Key::M),
+        ('n', Key::N),
+        ('o', Key::O),
+        ('p', Key::P),
+        ('q', Key::Q),
+        ('r', Key::R),
+        ('s', Key::S),
+        ('t', Key::T),
+        ('u', Key::U),
+        ('v', Key::V),
+        ('w', Key::W),
+        ('x', Key::X),
+        ('y', Key::Y),
+        ('z', Key::Z),
+    ] {
+        assert_one_mapping(&mut mapped, typed, key, false);
+        assert_one_mapping(&mut mapped, typed.to_ascii_uppercase(), key, true);
+    }
+    for digit in 0..=9u8 {
+        assert_one_mapping(
+            &mut mapped,
+            char::from(b'0' + digit),
+            Key::Digit(digit),
+            false,
+        );
+    }
+    for (typed, digit) in [
+        ('!', 1u8),
+        ('@', 2),
+        ('#', 3),
+        ('$', 4),
+        ('%', 5),
+        ('^', 6),
+        ('&', 7),
+        ('*', 8),
+        ('(', 9),
+        (')', 0),
+    ] {
+        assert_one_mapping(&mut mapped, typed, Key::Digit(digit), true);
+    }
+    for (typed, key) in [
+        ('\'', Key::Quote),
+        ('[', Key::LeftBracket),
+        (']', Key::RightBracket),
+        (';', Key::Semicolon),
+        (',', Key::Comma),
+        ('.', Key::Dot),
+        ('/', Key::Slash),
+        ('\\', Key::BackSlash),
+        ('-', Key::Minus),
+        ('=', Key::Equals),
+        ('`', Key::Backquote),
+    ] {
+        assert_one_mapping(&mut mapped, typed, key, false);
+    }
+    assert_eq!(mapped.len(), 87, "the CLI table maps exactly 87 characters");
+
+    // Domain closure: every printable ASCII character maps exactly when the
+    // table lists it, and nothing else maps.
+    for code in 0x20u32..=0x7E {
+        let typed = char::from_u32(code).expect("printable ASCII");
+        assert_eq!(
+            cli_key_event(typed).is_some(),
+            mapped.contains(&typed),
+            "domain drift at {typed:?}"
+        );
+    }
+    for code in 0u32..0x20 {
+        if matches!(code, 8..=10) {
+            continue;
+        }
+        let typed = char::from_u32(code).expect("control");
+        assert!(
+            cli_key_event(typed).is_none(),
+            "control {code:#04X} must be refused"
+        );
+    }
+    for typed in ['\r', '~', '\u{7F}', 'ệ', 'Đ', '中', '😀'] {
+        assert!(cli_key_event(typed).is_none(), "{typed:?} must be refused");
     }
 }
 
 fn corpus_steps(case: &CorpusCase) -> Vec<Step> {
     case.input
         .chars()
-        .map(|typed| Step::Key(event_for(typed)))
+        .map(|typed| {
+            let event = cli_key_event(typed).unwrap_or_else(|| {
+                panic!(
+                    "{}: unmapped corpus character {typed:?} (U+{:04X}); the CLI refuses it",
+                    case.source, typed as u32
+                )
+            });
+            Step::Key(event)
+        })
         .collect()
 }
 
@@ -686,6 +819,35 @@ fn pools_cover_the_public_event_and_option_surface() {
     assert_eq!(text_pool().len(), 9);
     let profiles = option_profiles();
     assert_eq!(profiles.len(), 23);
+    assert_cli_mapping_is_pinned();
+    // Every macro-loading profile must open the gate: `engine.rs` checks
+    // `use_macro` at every macro entry point, so a table behind a closed gate
+    // would be dead weight. The odd profiles are the ones `case_macros` fills.
+    for index in (1..profiles.len()).step_by(2) {
+        assert!(
+            profiles[index].use_macro,
+            "profile {index} loads macros behind a closed gate"
+        );
+    }
+    // The English branch (`engine.rs:317-322`) needs `enabled = false` and both
+    // macro flags; profile 21 is odd, so it also carries a table.
+    let english = &profiles[21];
+    assert!(!english.enabled);
+    assert!(english.use_macro && english.use_macro_in_english);
+    assert!(!case_macros(21).is_empty());
+    // ...and it must expand with that table, not merely run: "ko" + Space is
+    // the first entry, and the break key is typed after the expansion.
+    let mut english_engine = Engine::with_macros(profiles[21].clone(), &case_macros(21));
+    for key in [Key::K, Key::O] {
+        english_engine.apply(&letter_event(key, false));
+    }
+    let outcome = english_engine.apply(&letter_event(Key::Space, false));
+    assert_eq!(
+        outcome.action,
+        Action::Macro,
+        "the English branch must expand a macro with both flags on"
+    );
+    assert!(outcome.edit.is_some());
     assert_eq!(Engine::MAX_BUFFER, 32);
     let methods: BTreeSet<String> = profiles
         .iter()
@@ -857,20 +1019,21 @@ fn crossing_the_buffer_capacity_keeps_32_letters_and_a_break_clears_them() {
         }
     }
 
-    // Overflow restore: 40 pushes fill 32 and park 8 in `overflow`; 40 deletes
-    // bring the word back to zero without ever exceeding the bound.
+    // Overflow restore (`Word::pop`, `word.rs:370-383`): 40 pushes fill 32 and
+    // park 8 in `overflow`. Deletes 0-7 pop the overflow back into the word and
+    // leave `len` at 32; from index 8 on each delete removes one letter, so the
+    // word is empty at index 39.
     let mut engine = Engine::new(Options::default());
     for _ in 0..40 {
         engine.apply(&letter_event(Key::C, false));
     }
     assert_eq!(engine.word().len(), 32);
-    let mut previous = engine.word().len();
     for index in 0..40 {
         engine.apply(&letter_event(Key::Backspace, false));
         let len = engine.word().len();
-        assert!(len <= previous, "delete grew the word at step {index}");
+        let expected = if index < 8 { 32 } else { 39 - index };
+        assert_eq!(len, expected, "delete {index} left {len} letters");
         assert!(len <= Engine::MAX_BUFFER);
-        previous = len;
     }
     assert_eq!(engine.word().len(), 0, "40 deletes must empty 40 pushes");
 
